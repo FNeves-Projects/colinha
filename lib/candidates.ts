@@ -96,39 +96,94 @@ async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate
   return mapRow(row, related.socials);
 }
 
-export async function searchCandidates(input: {
-  query: string;
+export async function listPartiesForOffice(input: {
   officeCode: number;
   uf: string;
   year: number;
+}): Promise<string[]> {
+  if (!hasDatabase()) return [];
+  const sql = getSql();
+  const rows = await sql.query(
+    `SELECT DISTINCT party_acronym
+       FROM candidates
+      WHERE election_year = $1
+        AND uf = $2
+        AND office_code = $3
+        AND party_acronym IS NOT NULL
+        AND btrim(party_acronym) <> ''
+      ORDER BY party_acronym`,
+    [input.year, input.uf, input.officeCode],
+  ) as Array<{ party_acronym: string }>;
+  return rows.map((row) => row.party_acronym.trim()).filter(Boolean);
+}
+
+export async function searchCandidates(input: {
+  query?: string;
+  officeCode: number;
+  uf: string;
+  year: number;
+  party?: string;
+  limit?: number;
 }): Promise<CandidateSummary[]> {
-  const query = input.query.trim();
+  const query = input.query?.trim() ?? "";
+  const limit = input.limit ?? (query ? 8 : 20);
+  const party = input.party?.trim() || null;
+
   if (input.officeCode === 6 && (query === "3088" || /teresinha/i.test(query))) {
     return [await getLiveTeresinha()];
   }
   if (!hasDatabase()) return [];
 
   const sql = getSql();
-  const numeric = /^\d+$/.test(query);
-  const rows = await sql.query(
-    `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
+  const candidateSelect = `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
             ballot_number, ballot_name, full_name, party_acronym, status,
             birth_date::text, occupation, education, photo_url, tse_url, source,
-            source_updated_at::text
+            source_updated_at::text`;
+
+  if (!query) {
+    const rows = await sql.query(
+      `${candidateSelect}
+         FROM candidates
+        WHERE election_year = $1
+          AND uf = $2
+          AND office_code = $3
+          AND ($4::text IS NULL OR party_acronym = $4)
+        ORDER BY ballot_name
+        LIMIT $5`,
+      [input.year, input.uf, input.officeCode, party, limit],
+    ) as CandidateRow[];
+    return rows.map((row) => mapRow(row));
+  }
+
+  const numeric = /^\d+$/.test(query);
+  const rows = await sql.query(
+    `${candidateSelect}
        FROM candidates
       WHERE election_year = $1
         AND uf = $2
         AND office_code = $3
-        AND ($4::boolean
-          AND ballot_number LIKE $5
-          OR NOT $4::boolean
-          AND (unaccent(ballot_name) ILIKE unaccent($6) OR unaccent(full_name) ILIKE unaccent($6)))
+        AND ($4::text IS NULL OR party_acronym = $4)
+        AND ($5::boolean
+          AND ballot_number LIKE $6
+          OR NOT $5::boolean
+          AND (unaccent(ballot_name) ILIKE unaccent($7) OR unaccent(full_name) ILIKE unaccent($7)))
       ORDER BY
-        CASE WHEN ballot_number = $7 THEN 0 ELSE 1 END,
-        similarity(unaccent(ballot_name), unaccent($8)) DESC,
+        CASE WHEN ballot_number = $8 THEN 0 ELSE 1 END,
+        similarity(unaccent(ballot_name), unaccent($9)) DESC,
         ballot_name
-      LIMIT 8`,
-    [input.year, input.uf, input.officeCode, numeric, `${query}%`, `%${query}%`, query, query],
+      LIMIT $10`,
+    [
+      input.year,
+      input.uf,
+      input.officeCode,
+      party,
+      numeric,
+      `${query}%`,
+      `%${query}%`,
+      query,
+      query,
+      limit,
+    ],
   ) as CandidateRow[];
 
   return rows.map((row) => mapRow(row));

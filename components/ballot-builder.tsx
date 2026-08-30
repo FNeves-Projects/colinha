@@ -30,6 +30,7 @@ import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
+import { CandidatePickerDrawer } from "@/components/candidate-picker-drawer";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
@@ -194,11 +195,11 @@ function BallotPreviewRow({ office, selection }: { office: Office; selection: Of
 function SpecialVoteCard({
   office,
   vote,
-  onClear,
+  onSwap,
 }: {
   office: Office;
   vote: SpecialVoteKind;
-  onClear: () => void;
+  onSwap: () => void;
 }) {
   return (
     <article className={`office-card selected special-vote special-vote-${vote}`}>
@@ -215,7 +216,7 @@ function SpecialVoteCard({
         </small>
       </div>
       <div className="selected-number">
-        <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
+        <button className="clear-button" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
           <ArrowLeftRight size={16} strokeWidth={2.2} />
         </button>
         {vote === "branco" ? (
@@ -228,43 +229,16 @@ function SpecialVoteCard({
   );
 }
 
-function VoteOptionButtons({
-  office,
-  onSelect,
-}: {
-  office: Office;
-  onSelect: (vote: SpecialVoteKind) => void;
-}) {
-  return (
-    <div className="vote-options">
-      <button type="button" className="vote-option vote-option-null" onClick={() => onSelect("nulo")}>
-        <span className="vote-option-label">Votar nulo</span>
-        <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
-        <span className="vote-option-tip">
-          Número que não existe. Anula o voto naquele cargo. Fonte: TSE.
-        </span>
-      </button>
-      <button type="button" className="vote-option vote-option-blank" onClick={() => onSelect("branco")}>
-        <span className="vote-option-label">Votar em branco</span>
-        <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
-        <span className="vote-option-tip">
-          Aperte BRANCO na urna. Não escolhe ninguém para o cargo. Fonte: TSE.
-        </span>
-      </button>
-    </div>
-  );
-}
-
 function SelectedOfficeCard({
   office,
   candidate,
   onInspect,
-  onClear,
+  onSwap,
 }: {
   office: Office;
   candidate: CandidateSummary;
   onInspect?: (candidate: CandidateSummary) => void;
-  onClear?: () => void;
+  onSwap?: () => void;
 }) {
   return (
     <article className={`office-card selected${office.fixed ? " fixed" : ""}`}>
@@ -285,8 +259,8 @@ function SelectedOfficeCard({
         )}
       </div>
       <div className="selected-number">
-        {!office.fixed && onClear && (
-          <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
+        {!office.fixed && onSwap && (
+          <button className="clear-button" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
             <ArrowLeftRight size={16} strokeWidth={2.2} />
           </button>
         )}
@@ -296,127 +270,77 @@ function SelectedOfficeCard({
   );
 }
 
+function EmptyOfficeSlot({ office, onOpen }: { office: Office; onOpen: () => void }) {
+  return (
+    <article className="office-card empty-slot">
+      <button type="button" className="empty-slot-button" onClick={onOpen}>
+        <span className="empty-photo" aria-hidden="true"><Search size={20} /></span>
+        <span className="office-card-copy">
+          <span className="office-card-heading">{office.label}</span>
+          <strong>Escolher candidato</strong>
+          <small>Busque, filtre por partido ou escolha branco/nulo</small>
+        </span>
+        <span className="selected-number">
+          <NumberBoxes digits={office.digits} />
+        </span>
+      </button>
+    </article>
+  );
+}
+
 function CandidatePicker({
   office,
   selected,
   onSelect,
   onSelectSpecial,
-  onClear,
   onInspect,
 }: {
   office: Office;
   selected: OfficeSelection;
   onSelect: (candidate: CandidateSummary) => void;
   onSelectSpecial: (vote: SpecialVoteKind) => void;
-  onClear: () => void;
   onInspect: (candidate: CandidateSummary) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<CandidateSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    if (office.fixed || selected || query.trim().length < 2) {
-      setResults([]);
-      setSearched(false);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({
-          q: query.trim(),
-          office: String(office.code),
-          uf: office.jurisdiction,
-          year: "2026",
-        });
-        const response = await fetch(`/api/candidates?${params}`, {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? "Falha na busca");
-        setResults((data.candidates ?? []).map(sanitizeCandidateSummary));
-        setSearched(true);
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          setResults([]);
-          setSearched(true);
-        }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }, 320);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [office, query, selected]);
-
-  if (selected?.type === "candidate") {
-    return (
-      <SelectedOfficeCard
-        office={office}
-        candidate={selected.candidate}
-        onInspect={onInspect}
-        onClear={onClear}
-      />
-    );
+  function handleSelect(candidate: CandidateSummary) {
+    onSelect(candidate);
+    setDrawerOpen(false);
   }
 
-  if (selected?.type === "special") {
-    return (
-      <SpecialVoteCard
-        office={office}
-        vote={selected.vote}
-        onClear={onClear}
-      />
-    );
+  function handleSelectSpecial(vote: SpecialVoteKind) {
+    onSelectSpecial(vote);
+    setDrawerOpen(false);
   }
 
   return (
-    <article className="office-card search-card">
-      <div className="empty-photo"><Search size={20} /></div>
-      <div className="office-card-copy search-copy">
-        <label htmlFor={`search-${office.id}`}>{office.label}</label>
-        <div className="search-field">
-          <Search size={17} />
-          <input
-            id={`search-${office.id}`}
-            value={query}
-            inputMode="search"
-            autoComplete="off"
-            placeholder={`Digite nome ou ${office.digits} dígitos`}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {loading && <span className="search-spinner" aria-label="Buscando" />}
-        </div>
-        <NumberBoxes
-          number={/^\d+$/.test(query) ? query.slice(0, office.digits) : undefined}
-          digits={office.digits}
+    <>
+      {selected?.type === "candidate" ? (
+        <SelectedOfficeCard
+          office={office}
+          candidate={selected.candidate}
+          onInspect={onInspect}
+          onSwap={office.fixed ? undefined : () => setDrawerOpen(true)}
         />
-        {!office.fixed && <VoteOptionButtons office={office} onSelect={onSelectSpecial} />}
-        {(results.length > 0 || searched) && (
-          <div className="search-results" role="listbox" aria-label={`Resultados para ${office.label}`}>
-            {results.map((candidate) => (
-              <button type="button" key={candidate.id} onClick={() => onSelect(candidate)}>
-                <CandidatePhoto candidate={candidate} size={42} />
-                <span>
-                  <strong>{candidate.ballotName}</strong>
-                  <small>{candidate.partyAcronym ?? "Partido não informado"}</small>
-                </span>
-                <b>{candidate.ballotNumber}</b>
-              </button>
-            ))}
-            {searched && results.length === 0 && (
-              <p>Nenhum candidato encontrado nesse cargo.</p>
-            )}
-          </div>
-        )}
-      </div>
-    </article>
+      ) : selected?.type === "special" ? (
+        <SpecialVoteCard
+          office={office}
+          vote={selected.vote}
+          onSwap={() => setDrawerOpen(true)}
+        />
+      ) : (
+        <EmptyOfficeSlot office={office} onOpen={() => setDrawerOpen(true)} />
+      )}
+
+      <CandidatePickerDrawer
+        office={office}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onSelect={handleSelect}
+        onSelectSpecial={handleSelectSpecial}
+        onInspect={onInspect}
+      />
+    </>
   );
 }
 
@@ -771,7 +695,6 @@ export function BallotBuilder() {
                 selected={selections[office.id]}
                 onSelect={(candidate) => selectCandidate(office, candidate)}
                 onSelectSpecial={(vote) => selectSpecialVote(office, vote)}
-                onClear={() => setSelections((current) => ({ ...current, [office.id]: null }))}
                 onInspect={inspectCandidate}
               />
             ))}

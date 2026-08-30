@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCandidateById, searchCandidates } from "@/lib/candidates";
+import { getCandidateById, listPartiesForOffice, searchCandidates } from "@/lib/candidates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const searchSchema = z.object({
-  q: z.string().trim().min(2).max(80),
+const officeScopeSchema = z.object({
   office: z.coerce.number().int().positive(),
   uf: z.enum(["SP", "BR"]),
   year: z.coerce.number().int().min(2026).max(2030).default(2026),
+});
+
+const searchSchema = officeScopeSchema.extend({
+  q: z.string().trim().max(80).optional(),
+  party: z.string().trim().max(20).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -22,8 +26,26 @@ export async function GET(request: NextRequest) {
         : NextResponse.json({ error: "Candidate not found." }, { status: 404 });
     }
 
+    if (request.nextUrl.searchParams.get("parties") === "1") {
+      const params = officeScopeSchema.safeParse({
+        office: request.nextUrl.searchParams.get("office"),
+        uf: request.nextUrl.searchParams.get("uf"),
+        year: request.nextUrl.searchParams.get("year") ?? 2026,
+      });
+      if (!params.success) {
+        return NextResponse.json({ error: "Invalid party lookup." }, { status: 400 });
+      }
+      const parties = await listPartiesForOffice({
+        officeCode: params.data.office,
+        uf: params.data.uf,
+        year: params.data.year,
+      });
+      return NextResponse.json({ parties }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     const params = searchSchema.safeParse({
-      q: request.nextUrl.searchParams.get("q"),
+      q: request.nextUrl.searchParams.get("q") ?? undefined,
+      party: request.nextUrl.searchParams.get("party") ?? undefined,
       office: request.nextUrl.searchParams.get("office"),
       uf: request.nextUrl.searchParams.get("uf"),
       year: request.nextUrl.searchParams.get("year") ?? 2026,
@@ -31,11 +53,18 @@ export async function GET(request: NextRequest) {
     if (!params.success) {
       return NextResponse.json({ error: "Invalid search." }, { status: 400 });
     }
+
+    const query = params.data.q?.trim() ?? "";
+    if (query.length > 0 && query.length < 2) {
+      return NextResponse.json({ error: "Invalid search." }, { status: 400 });
+    }
+
     const candidates = await searchCandidates({
-      query: params.data.q,
+      query: query || undefined,
       officeCode: params.data.office,
       uf: params.data.uf,
       year: params.data.year,
+      party: params.data.party,
     });
     return NextResponse.json({ candidates }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
