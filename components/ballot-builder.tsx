@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import {
+  ArrowLeftRight,
   Check,
   ExternalLink,
   Info,
@@ -139,7 +140,7 @@ function SelectedOfficeCard({
         <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
         {mode === "interactive" && !office.fixed && onClear && (
           <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
-            Trocar
+            <ArrowLeftRight size={16} strokeWidth={2.2} />
           </button>
         )}
       </div>
