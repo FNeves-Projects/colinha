@@ -320,6 +320,7 @@ export function BallotBuilder() {
   const [notice, setNotice] = useState("");
   const ballotRef = useRef<HTMLDivElement>(null);
   const refreshedSavedSelections = useRef(false);
+  const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     try {
@@ -393,6 +394,16 @@ export function BallotBuilder() {
   }, [hydrated, selections]);
 
   useEffect(() => {
+    const audio = new Audio("/sounds/urna-confirma.wav");
+    audio.preload = "auto";
+    urnaSoundRef.current = audio;
+    return () => {
+      audio.pause();
+      urnaSoundRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ selections, muted }));
   }, [hydrated, muted, selections]);
@@ -403,25 +414,17 @@ export function BallotBuilder() {
     return Boolean(first && second && first === second);
   }, [selections]);
 
+  function playUrnaSound() {
+    const audio = urnaSoundRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    void audio.play().catch(() => {});
+  }
+
   function playConfirmation() {
     if (muted) return;
-    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const context = new AudioContextClass();
-    const now = context.currentTime;
-    [0, 0.12].forEach((offset, index) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.value = index === 0 ? 880 : 1174.66;
-      gain.gain.setValueAtTime(0.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.12, now + offset + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.1);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(now + offset);
-      oscillator.stop(now + offset + 0.11);
-    });
-    window.setTimeout(() => void context.close(), 450);
+    playUrnaSound();
   }
 
   function selectCandidate(office: Office, candidate: CandidateSummary) {
@@ -516,7 +519,14 @@ export function BallotBuilder() {
             <span className="brand-mark"><Check size={19} strokeWidth={3} /></span>
             <span>colinha<span>.2026</span></span>
           </a>
-          <button className="sound-toggle" type="button" onClick={() => setMuted((value) => !value)}>
+          <button
+            className="sound-toggle"
+            type="button"
+            onClick={() => {
+              if (muted) playUrnaSound();
+              setMuted((value) => !value);
+            }}
+          >
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
             {muted ? "Som desligado" : "Som ligado"}
           </button>
