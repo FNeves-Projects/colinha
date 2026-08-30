@@ -24,17 +24,18 @@ npm run dev
   DivulgaCand, and a pinned mirror snapshot of the original TSE CSV files.
 - The contingency snapshot is pinned to an auditable commit. It never replaces a
   newer TSE candidate photo already stored in Neon.
-- Candidate photos are first normalized to the TSE image endpoint and can then
-  be copied to Vercel Blob. When `BLOB_READ_WRITE_TOKEN` is configured, each sync
-  downloads the official TSE photo ZIP archives for SP/BR, uploads a limited
-  batch of photos to public Blob storage, and updates `candidates.photo_url`
-  with the Blob URL. The sync route runs in São Paulo (`gru1`) because TSE/Akamai
-  blocks many non-Brazil datacenter IPs with HTTP 403.
+- Candidate photos cannot be downloaded from Vercel: TSE/Akamai returns HTTP
+  403 for datacenter IPs. The scheduled `/api/sync/tse` job therefore skips
+  photo downloads and keeps existing Blob URLs.
+- To cache photos, run `npm run sync:photos` on a local machine that can open
+  the TSE photo URL in a browser. The script downloads the official SP/BR ZIP
+  archives when available, falls back to individual DivulgaCand image URLs,
+  uploads each file to Vercel Blob, and writes the public Blob URL into
+  `candidates.photo_url`.
 - `TSE_PHOTO_ZIP_URLS` overrides the official SP/BR photo archive URLs if TSE
-  moves the files. `CANDIDATE_PHOTO_SYNC_LIMIT` controls the maximum number of
-  photo uploads per sync run. The default is `200`; set it higher for a one-time
-  backfill or `0` to disable Blob photo syncing while keeping candidate data sync
-  enabled.
+  moves the files. `CANDIDATE_PHOTO_SYNC_LIMIT` caps how many photos a local
+  run uploads (default `20000`). Pass `--limit 200` for a smaller batch, or
+  `--limit 0` to skip uploads.
 - Social links are shown as declared to the Brazilian Electoral Justice system.
 - If TSE changes the file URLs, configure the `TSE_*_URL` variables in Vercel.
 
@@ -49,10 +50,15 @@ To store candidate photos in Vercel Blob:
 1. Create a public Vercel Blob store in the same team as this project.
 2. Connect the Blob store to the `colinha-digital` project.
 3. Confirm that Vercel added `BLOB_READ_WRITE_TOKEN` to the project environment.
-4. Run `/api/sync/tse` manually or wait for the scheduled/post-deploy sync.
+4. Copy that token into `.env.local` together with `DATABASE_URL`.
+5. From your computer (not Vercel), run:
+
+```bash
+npm run sync:photos
+```
 
 The database stores only the resulting public Blob URL; image files are not saved
-inside Postgres.
+inside Postgres. Re-run the local command if TSE publishes new candidate photos.
 
 ## Post-Deploy Sync
 

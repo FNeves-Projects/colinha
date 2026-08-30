@@ -581,6 +581,8 @@ export async function syncTse() {
       photoBlobArchivePhotoCount?: number;
       photoBlobArchiveErrors?: string[];
       photoBlobErrors?: string[];
+      photoBlobSkippedOnVercel?: boolean;
+      photoBlobHint?: string;
       snapshotUpdatedAt?: string;
     };
     try {
@@ -669,6 +671,8 @@ export async function syncTse() {
         photoBlobArchivePhotoCount: 0,
         photoBlobArchiveErrors: [],
         photoBlobErrors: [message.slice(0, 240)],
+        photoBlobSkippedOnVercel: process.env.VERCEL === "1",
+        photoBlobHint: "Run npm run sync:photos from a local machine that can open TSE photo URLs.",
       };
     });
     details = { ...details, photoBackfillCount, ...photoBlobDetails };
