@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import {
@@ -790,7 +791,7 @@ function ProposalPdfModal({
   proposal: CandidateProposal;
   onClose: () => void;
 }) {
-  const previewUrl = proposalPdfApiUrl(proposal);
+  const previewUrl = `${proposalPdfApiUrl(proposal)}#toolbar=0&navpanes=0&view=FitH`;
   const downloadUrl = proposalPdfApiUrl(proposal, true);
   const fileName = proposalDownloadFileName(proposal.title);
 
@@ -802,6 +803,14 @@ function ProposalPdfModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   function handleDownload() {
     const link = document.createElement("a");
     link.href = downloadUrl;
@@ -812,10 +821,10 @@ function ProposalPdfModal({
     link.remove();
   }
 
-  return (
+  return createPortal(
     <div className="pdf-preview-backdrop proposal-pdf-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className="pdf-preview-modal"
+        className="pdf-preview-modal proposal-pdf-modal"
         role="dialog"
         aria-modal="true"
         aria-label={`Visualizar proposta: ${proposal.title}`}
@@ -827,7 +836,7 @@ function ProposalPdfModal({
             <X size={21} />
           </button>
         </div>
-        <div className="pdf-preview-frame-wrap">
+        <div className="pdf-preview-frame-wrap proposal-pdf-frame-wrap">
           <iframe className="pdf-preview-frame" src={previewUrl} title={proposal.title} />
         </div>
         <div className="pdf-preview-actions">
@@ -837,7 +846,8 @@ function ProposalPdfModal({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
