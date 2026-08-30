@@ -1192,6 +1192,73 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .facts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .facts-grid span, .asset-total span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
 .facts-grid strong { font-size: 10.5px; line-height: 1.4; color: var(--ink); }
+.profile-slate-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #dce4f2;
+}
+.profile-slate-block h4 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.profile-slate-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.profile-slate-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #dce4f2;
+  border-radius: 12px;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.profile-slate-card:hover {
+  border-color: #c7d2e5;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.06);
+}
+.profile-slate-card .candidate-photo {
+  width: 52px;
+  height: 62px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.profile-slate-copy {
+  min-width: 0;
+  flex: 1;
+}
+.profile-slate-copy span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 8px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.profile-slate-copy strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.profile-slate-action {
+  flex-shrink: 0;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 800;
+}
 .source-note { margin: -6px 0 12px; color: var(--muted); font-size: 9px; }
 .social-links { display: flex; flex-wrap: wrap; gap: 7px; }
 .social-links a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: white; text-decoration: none; font-size: 9.5px; font-weight: 700; }

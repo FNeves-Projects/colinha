@@ -1,7 +1,7 @@
 import { getSql, hasDatabase } from "./db";
 import { TERESINHA } from "./offices";
 import { normalizeSocialLinks } from "./social-links";
-import { slateMateOfficeCodes } from "./ticket-mates";
+import { hasTicketSlate, slateMateOfficeCodes, ticketHeadOfficeCode, ticketHeadOfficeCodeFor } from "./ticket-mates";
 import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
 import type { Candidate, CandidateSummary, SocialLink } from "./types";
 
@@ -215,6 +215,68 @@ export async function getTicketSlateForHead(input: {
   ) as CandidateRow[];
 
   return rows.map((row) => mapRow(row));
+}
+
+export async function getTicketHeadForMate(input: {
+  mateOfficeCode: number;
+  ballotNumber: string;
+  uf: string;
+  year: number;
+}): Promise<CandidateSummary | null> {
+  const headOfficeCode = ticketHeadOfficeCode(input.mateOfficeCode);
+  if (!headOfficeCode || !hasDatabase()) return null;
+
+  const sql = getSql();
+  const rows = await sql.query(
+    `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
+            ballot_number, ballot_name, full_name, party_acronym, status,
+            birth_date::text, occupation, education, photo_url, tse_url, source,
+            source_updated_at::text
+       FROM candidates
+      WHERE election_year = $1
+        AND uf = $2
+        AND office_code = $3
+        AND ltrim(ballot_number, '0') = ltrim($4, '0')
+      LIMIT 1`,
+    [input.year, input.uf, headOfficeCode, input.ballotNumber],
+  ) as CandidateRow[];
+
+  const row = rows[0];
+  return row ? mapRow(row) : null;
+}
+
+export async function getTicketChapaForCandidate(input: {
+  officeCode: number;
+  candidateId: string;
+  ballotNumber: string;
+  uf: string;
+  year: number;
+}): Promise<CandidateSummary[]> {
+  const headOfficeCode = ticketHeadOfficeCodeFor(input.officeCode);
+  if (!headOfficeCode || !hasDatabase()) return [];
+
+  const mates = await getTicketSlateForHead({
+    headOfficeCode,
+    ballotNumber: input.ballotNumber,
+    uf: input.uf,
+    year: input.year,
+  });
+
+  if (hasTicketSlate(input.officeCode)) {
+    return mates;
+  }
+
+  const head = await getTicketHeadForMate({
+    mateOfficeCode: input.officeCode,
+    ballotNumber: input.ballotNumber,
+    uf: input.uf,
+    year: input.year,
+  });
+
+  return [
+    ...(head ? [head] : []),
+    ...mates.filter((mate) => mate.id !== input.candidateId),
+  ].filter((member, index, members) => members.findIndex((entry) => entry.id === member.id) === index);
 }
 
 export async function getTicketMateForHead(input: {

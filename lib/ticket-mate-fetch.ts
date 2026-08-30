@@ -9,6 +9,45 @@ export function ticketMateLookupUf(uf: string, jurisdiction?: Office["jurisdicti
   return uf === "BRASIL" ? "BR" : uf;
 }
 
+export async function fetchTicketChapaForCandidate(
+  candidate: Pick<CandidateSummary, "id" | "officeCode" | "ballotNumber" | "uf">,
+  signal?: AbortSignal,
+): Promise<CandidateSummary[]> {
+  const params = new URLSearchParams({
+    ticketChapa: "1",
+    office: String(candidate.officeCode),
+    candidateId: candidate.id,
+    ballot: candidate.ballotNumber,
+    uf: ticketMateLookupUf(candidate.uf),
+    year: "2026",
+  });
+
+  const response = await fetch(`/api/candidates?${params}`, { signal, cache: "no-store" });
+  if (!response.ok) return [];
+  const data = await response.json() as { slate?: CandidateSummary[] };
+  return Array.isArray(data.slate) ? data.slate : [];
+}
+
+export async function fetchTicketSlateForCandidate(
+  candidate: Pick<CandidateSummary, "officeCode" | "ballotNumber" | "uf">,
+  signal?: AbortSignal,
+): Promise<CandidateSummary[]> {
+  if (!hasTicketSlate(candidate.officeCode)) return [];
+
+  const params = new URLSearchParams({
+    ticketMate: "1",
+    headOffice: String(candidate.officeCode),
+    ballot: candidate.ballotNumber,
+    uf: ticketMateLookupUf(candidate.uf),
+    year: "2026",
+  });
+
+  const response = await fetch(`/api/candidates?${params}`, { signal, cache: "no-store" });
+  if (!response.ok) return [];
+  const data = await response.json() as { slate?: CandidateSummary[] };
+  return Array.isArray(data.slate) ? data.slate : [];
+}
+
 export async function fetchTicketSlateForOffice(
   office: Office,
   candidate: CandidateSummary,

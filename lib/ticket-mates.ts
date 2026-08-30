@@ -10,6 +10,34 @@ export const TICKET_MATE_OFFICE: Record<number, number> = {
   3: 4,
 };
 
+export function ticketHeadOfficeCode(mateOfficeCode: number) {
+  for (const [headOfficeCode, mateOfficeCodes] of Object.entries(SLATE_MATE_OFFICES)) {
+    if (mateOfficeCodes.includes(mateOfficeCode)) return Number(headOfficeCode);
+  }
+  return null;
+}
+
+export function ticketHeadOfficeCodeFor(officeCode: number) {
+  if (hasTicketSlate(officeCode)) return officeCode;
+  return ticketHeadOfficeCode(officeCode);
+}
+
+export function isTicketChapaMember(officeCode: number) {
+  return ticketHeadOfficeCodeFor(officeCode) !== null;
+}
+
+export function slateHeadRoleLabel(headOfficeCode: number) {
+  if (headOfficeCode === 1) return "Presidente";
+  if (headOfficeCode === 3) return "Governador";
+  if (headOfficeCode === 5) return "Senador";
+  return "Titular";
+}
+
+export function slateMemberRoleLabel(headOfficeCode: number, memberOfficeCode: number) {
+  if (memberOfficeCode === headOfficeCode) return slateHeadRoleLabel(headOfficeCode);
+  return slateMateRoleLabel(headOfficeCode, memberOfficeCode);
+}
+
 export function slateMateOfficeCodes(headOfficeCode: number) {
   return SLATE_MATE_OFFICES[headOfficeCode] ?? [];
 }

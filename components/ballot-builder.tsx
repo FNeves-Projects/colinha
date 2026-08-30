@@ -34,7 +34,8 @@ import {
 } from "@/lib/ballot-selections";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
 import { previewOfficeLabel } from "@/lib/party-styles";
-import { slateMateRoleLabel } from "@/lib/ticket-mates";
+import { fetchTicketChapaForCandidate } from "@/lib/ticket-mate-fetch";
+import { isTicketChapaMember, slateMemberRoleLabel, slateMateRoleLabel, ticketHeadOfficeCodeFor } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
@@ -637,15 +638,40 @@ function CandidatePicker({
   );
 }
 
-function ProfileContent({ candidate }: { candidate: Candidate }) {
+function ProfileContent({
+  candidate,
+  onInspectMate,
+}: {
+  candidate: Candidate;
+  onInspectMate?: (candidate: CandidateSummary) => void;
+}) {
+  const [ticketSlate, setTicketSlate] = useState<CandidateSummary[]>([]);
   const age = candidate.birthDate
     ? new Date(2026, 9, 4).getFullYear() - new Date(candidate.birthDate).getFullYear()
     : null;
-  const socials = normalizeSocialLinks(candidate.socials);
+  const socials = normalizeSocialLinks(candidate.socials ?? []);
   const tseHref = candidate.tseUrl
     || (candidate.sqCandidate
       ? tseCandidateUrl(candidate.uf === "BRASIL" ? "BR" : candidate.uf, candidate.sqCandidate)
       : null);
+
+  useEffect(() => {
+    if (!isTicketChapaMember(candidate.officeCode)) {
+      setTicketSlate([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    void fetchTicketChapaForCandidate(candidate, controller.signal)
+      .then(setTicketSlate)
+      .catch(() => {
+        if (!controller.signal.aborted) setTicketSlate([]);
+      });
+
+    return () => controller.abort();
+  }, [candidate.id, candidate.officeCode, candidate.ballotNumber, candidate.uf]);
+
+  const ticketHeadOfficeCode = ticketHeadOfficeCodeFor(candidate.officeCode);
 
   return (
     <>
@@ -668,6 +694,30 @@ function ProfileContent({ candidate }: { candidate: Candidate }) {
           <div><span>Escolaridade</span><strong>{candidate.education ?? "Não informada"}</strong></div>
           <div><span>Fonte</span><strong>{candidate.source}</strong></div>
         </div>
+        {ticketSlate.length > 0 && ticketHeadOfficeCode !== null && (
+          <div className="profile-slate-block">
+            <h4>Chapa</h4>
+            <ul className="profile-slate-list">
+              {ticketSlate.map((mate) => (
+                <li key={mate.id}>
+                  <button
+                    type="button"
+                    className="profile-slate-card"
+                    onClick={() => onInspectMate?.(mate)}
+                    aria-label={`Ver informações de ${mate.ballotName}`}
+                  >
+                    <CandidatePhoto candidate={mate} size={52} />
+                    <div className="profile-slate-copy">
+                      <span>{slateMemberRoleLabel(ticketHeadOfficeCode, mate.officeCode)}</span>
+                      <strong>{mate.ballotName}</strong>
+                    </div>
+                    <span className="profile-slate-action">Ver info</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {socials.length > 0 && (
@@ -697,10 +747,12 @@ function CandidateProfile({
   candidate,
   presentation,
   onClose,
+  onInspectMate,
 }: {
   candidate: Candidate;
   presentation: "inline" | "modal";
   onClose: () => void;
+  onInspectMate?: (candidate: CandidateSummary) => void;
 }) {
   if (presentation === "modal") {
     return (
@@ -715,7 +767,7 @@ function CandidateProfile({
           <button className="drawer-close" type="button" onClick={onClose} aria-label="Fechar informações">
             <X size={21} />
           </button>
-          <ProfileContent candidate={candidate} />
+          <ProfileContent candidate={candidate} onInspectMate={onInspectMate} />
         </aside>
       </div>
     );
@@ -730,7 +782,7 @@ function CandidateProfile({
       <button className="profile-panel-close" type="button" onClick={onClose} aria-label="Fechar informações">
         <X size={20} />
       </button>
-      <ProfileContent candidate={candidate} />
+      <ProfileContent candidate={candidate} onInspectMate={onInspectMate} />
     </section>
   );
 }
@@ -935,15 +987,15 @@ export function BallotBuilder() {
   }, [profile, mobilePicker]);
 
   async function inspectCandidate(candidate: CandidateSummary) {
-    if (!mobilePicker) setPickerOfficeId(null);
+    setPickerOfficeId(null);
     setProfileLoading(true);
     try {
       const lookupId = candidate.id === TERESINHA.id || candidate.sqCandidate === TERESINHA.sqCandidate
         ? TERESINHA.id
         : candidate.id;
       const response = await fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, { cache: "no-store" });
-      const data = await response.json();
-      if (response.ok) setProfile(data.candidate);
+      const data = await response.json() as { candidate?: Candidate };
+      if (response.ok && data.candidate) setProfile(data.candidate);
     } finally {
       setProfileLoading(false);
     }
@@ -1124,7 +1176,14 @@ export function BallotBuilder() {
         </section>
 
         <aside className={`preview-panel${showInlinePicker ? " is-picking" : ""}${showInlineProfile ? " is-profile" : ""}`}>
-          {showInlinePicker && pickerOffice ? (
+          {showInlineProfile && profile ? (
+            <CandidateProfile
+              candidate={profile}
+              presentation="inline"
+              onClose={() => setProfile(null)}
+              onInspectMate={inspectCandidate}
+            />
+          ) : showInlinePicker && pickerOffice ? (
             <CandidatePickerPanel
               office={pickerOffice}
               presentation="inline"
@@ -1133,12 +1192,6 @@ export function BallotBuilder() {
               onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
               onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
               onClearCurrent={() => clearOffice(pickerOffice.id)}
-            />
-          ) : showInlineProfile && profile ? (
-            <CandidateProfile
-              candidate={profile}
-              presentation="inline"
-              onClose={() => setProfile(null)}
             />
           ) : profileLoading && !mobilePicker ? (
             <p className="profile-panel-loading">Carregando informações do candidato…</p>
@@ -1247,6 +1300,7 @@ export function BallotBuilder() {
           candidate={profile}
           presentation="modal"
           onClose={() => setProfile(null)}
+          onInspectMate={inspectCandidate}
         />
       )}
 

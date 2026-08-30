@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCandidateById, getTicketSlateForHead, listPartiesForOffice, searchCandidates } from "@/lib/candidates";
+import { getCandidateById, getTicketChapaForCandidate, getTicketSlateForHead, listPartiesForOffice, searchCandidates } from "@/lib/candidates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +23,14 @@ const ticketMateSchema = z.object({
   year: z.coerce.number().int().min(2026).max(2030).default(2026),
 });
 
+const ticketChapaSchema = z.object({
+  office: z.coerce.number().int().positive(),
+  candidateId: z.string().trim().min(1),
+  ballot: z.string().trim().min(1).max(10),
+  uf: z.string().trim().transform((value) => (value === "BRASIL" ? "BR" : value)).pipe(z.enum(["SP", "BR"])),
+  year: z.coerce.number().int().min(2026).max(2030).default(2026),
+});
+
 export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   try {
@@ -31,6 +39,27 @@ export async function GET(request: NextRequest) {
       return candidate
         ? NextResponse.json({ candidate })
         : NextResponse.json({ error: "Candidate not found." }, { status: 404 });
+    }
+
+    if (request.nextUrl.searchParams.get("ticketChapa") === "1") {
+      const params = ticketChapaSchema.safeParse({
+        office: request.nextUrl.searchParams.get("office"),
+        candidateId: request.nextUrl.searchParams.get("candidateId"),
+        ballot: request.nextUrl.searchParams.get("ballot"),
+        uf: request.nextUrl.searchParams.get("uf"),
+        year: request.nextUrl.searchParams.get("year") ?? 2026,
+      });
+      if (!params.success) {
+        return NextResponse.json({ error: "Invalid ticket chapa lookup." }, { status: 400 });
+      }
+      const slate = await getTicketChapaForCandidate({
+        officeCode: params.data.office,
+        candidateId: params.data.candidateId,
+        ballotNumber: params.data.ballot,
+        uf: params.data.uf,
+        year: params.data.year,
+      });
+      return NextResponse.json({ slate }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.nextUrl.searchParams.get("ticketMate") === "1") {
