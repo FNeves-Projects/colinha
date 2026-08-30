@@ -32,3 +32,17 @@ npm run dev
 `vercel.json` schedules a daily sync, which is compatible with the Hobby plan.
 For commercial or campaign production use, choose a plan that fits Vercel's terms
 and increase the cron frequency if needed.
+
+## Post-Deploy Sync
+
+The GitHub Actions workflow in `.github/workflows/sync-tse-after-deploy.yml`
+calls `/api/sync/tse` after Vercel reports a successful production deployment.
+It also supports manual runs from the GitHub Actions tab.
+
+Create the same `CRON_SECRET` value in both places:
+
+- Vercel project environment variables, scoped to Production.
+- GitHub repository secret named `CRON_SECRET`.
+
+If the current Vercel value cannot be revealed, rotate it by generating a new
+random value and saving that same value in Vercel and GitHub.

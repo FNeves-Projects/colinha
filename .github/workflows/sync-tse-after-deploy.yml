@@ -1,0 +1,34 @@
+name: Sync TSE data after production deploy
+
+on:
+  deployment_status:
+  workflow_dispatch:
+
+jobs:
+  sync-tse:
+    name: Sync TSE data
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.deployment_status.state == 'success' &&
+        github.event.deployment.environment == 'Production'
+      )
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      SITE_URL: https://colinha-digital-sable.vercel.app
+
+    steps:
+      - name: Validate required secret
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Missing GitHub Actions secret CRON_SECRET."
+            exit 1
+          fi
+
+      - name: Run TSE sync endpoint
+        run: |
+          curl --fail --show-error --silent --max-time 300 --retry 2 --retry-delay 10 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$SITE_URL/api/sync/tse"
