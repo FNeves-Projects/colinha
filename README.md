@@ -31,6 +31,8 @@ npm run sync
 ```
 
 Use `npm run sync -- --skip-photos` to refresh database fields only.
+Use `npm run sync -- --skip-details` to skip nationality/proposal PDF sync.
+Use `npm run sync:details` for profile fields and proposal PDFs alone.
 Use `npm run sync:photos` for photos alone.
 - The contingency snapshot is pinned to an auditable commit. It never replaces a
   newer TSE candidate photo already stored in Neon.
@@ -71,6 +73,23 @@ and run `npm run sync:photos -- --local-only`.
 
 Then commit `public/candidate-photos/` and deploy. Re-run the command if TSE
 publishes new candidate photos.
+
+## Candidate proposals and profile fields
+
+Nationality, birthplace, and proposal PDFs are fetched from DivulgaCand during
+`npm run sync:details` (also included in full `npm run sync`). Like photos, this
+must run on your machine — Vercel/datacenter IPs are often blocked by TSE.
+
+PDFs are saved under `public/candidate-proposals/{tseFileId}.pdf` and metadata
+is stored in Neon (`nationality`, `birthplace`, `candidate_proposals`). Commit
+the generated PDFs and deploy so production can serve them as static files.
+
+```bash
+npm run db:migrate
+npm run sync:details
+```
+
+Use `--limit=50` while testing. Re-run after deploy when TSE publishes updates.
 
 ## Post-Deploy Sync
 

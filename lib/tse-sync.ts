@@ -1,6 +1,7 @@
 import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
 import { CANDIDATE_PHOTO_PUBLIC_PATH, candidatePhotoPublicUrl } from "./candidate-photo-urls";
+import { syncCandidateDetails } from "./candidate-detail-sync";
 import { syncCandidatePhotos } from "./candidate-photo-sync";
 import { getSql } from "./db";
 import { normalizeSocialLink } from "./social-links";
@@ -639,7 +640,7 @@ async function upsertAssets(rows: CsvRow[]) {
   return counts[0]?.count ?? 0;
 }
 
-export async function syncTse(options?: { skipPhotos?: boolean }) {
+export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: boolean }) {
   const sql = getSql();
   const runRows = await sql.query(
     `INSERT INTO sync_runs (source, status) VALUES ('TSE', 'running') RETURNING id::text`,
@@ -778,7 +779,37 @@ export async function syncTse(options?: { skipPhotos?: boolean }) {
         photoSyncHint: "Run npm run sync:photos from a local machine with TSE photo ZIPs.",
       };
     });
-    details = { ...details, photoBackfillCount, ...photoSyncDetails };
+    const detailSyncDetails = options?.skipDetails
+      ? {
+          detailSyncEnabled: false,
+          detailSyncLimit: 0,
+          detailSyncScannedCount: 0,
+          detailSyncUpdatedCount: 0,
+          detailSyncProposalCount: 0,
+          detailSyncPdfWrittenCount: 0,
+          detailSyncPdfSkippedCount: 0,
+          detailSyncFailedCount: 0,
+          detailSyncErrors: [],
+          detailSyncSkippedOnVercel: false,
+          detailSyncHint: "Candidate detail sync skipped (--skip-details).",
+        }
+      : await syncCandidateDetails().catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            detailSyncEnabled: process.env.VERCEL !== "1",
+            detailSyncLimit: Number(process.env.CANDIDATE_DETAIL_SYNC_LIMIT ?? 20_000),
+            detailSyncScannedCount: 0,
+            detailSyncUpdatedCount: 0,
+            detailSyncProposalCount: 0,
+            detailSyncPdfWrittenCount: 0,
+            detailSyncPdfSkippedCount: 0,
+            detailSyncFailedCount: 0,
+            detailSyncErrors: [message.slice(0, 240)],
+            detailSyncSkippedOnVercel: process.env.VERCEL === "1",
+            detailSyncHint: "Run npm run sync:details from a local machine.",
+          };
+        });
+    details = { ...details, photoBackfillCount, ...photoSyncDetails, ...detailSyncDetails };
     await sql.query(
       `UPDATE sync_runs SET status = 'success', finished_at = now(), details = $2::jsonb WHERE id = $1`,
       [runId, JSON.stringify(details)],

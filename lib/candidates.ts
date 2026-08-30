@@ -1,9 +1,10 @@
 import { getSql, hasDatabase } from "./db";
+import { candidateProposalPublicUrl } from "./candidate-proposal-urls";
 import { TERESINHA } from "./offices";
 import { normalizeSocialLinks } from "./social-links";
 import { hasTicketSlate, slateMateOfficeCodes, ticketHeadOfficeCode, ticketHeadOfficeCodeFor } from "./ticket-mates";
 import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
-import type { Candidate, CandidateSummary, SocialLink } from "./types";
+import type { Candidate, CandidateProposal, CandidateSummary, SocialLink } from "./types";
 
 type CandidateRow = {
   id: string;
@@ -20,6 +21,8 @@ type CandidateRow = {
   birth_date: string | null;
   gender: string | null;
   marital_status: string | null;
+  nationality: string | null;
+  birthplace: string | null;
   occupation: string | null;
   education: string | null;
   photo_url: string | null;
@@ -33,7 +36,12 @@ function cleanStoredValue(value: string | null) {
   return clean && !["#NULO#", "#NE", "-1"].includes(clean) ? clean : null;
 }
 
-function mapRow(row: CandidateRow, socials: SocialLink[] = []): Candidate {
+type CandidateRelations = {
+  socials: SocialLink[];
+  proposals?: CandidateProposal[];
+};
+
+function mapRow(row: CandidateRow, related: CandidateRelations = { socials: [] }): Candidate {
   return {
     id: String(row.id),
     sqCandidate: row.sq_candidate,
@@ -49,28 +57,51 @@ function mapRow(row: CandidateRow, socials: SocialLink[] = []): Candidate {
     birthDate: row.birth_date,
     gender: cleanStoredValue(row.gender),
     maritalStatus: cleanStoredValue(row.marital_status),
-    nationality: null,
-    birthplace: null,
+    nationality: cleanStoredValue(row.nationality),
+    birthplace: cleanStoredValue(row.birthplace),
     occupation: cleanStoredValue(row.occupation),
     education: cleanStoredValue(row.education),
     photoUrl: cleanStoredValue(row.photo_url),
     tseUrl: cleanStoredValue(row.tse_url),
-    socials: normalizeSocialLinks(socials),
+    socials: normalizeSocialLinks(related.socials),
     assets: [],
     source: row.source,
     sourceUpdatedAt: row.source_updated_at,
+    proposals: related.proposals,
   };
 }
 
-async function loadRelated(candidateId: string) {
+async function loadRelated(candidateId: string, options?: { includeProposals?: boolean }) {
   const sql = getSql();
   const socialRowsRaw = await sql.query(
     `SELECT platform, url, handle FROM candidate_social_links
       WHERE candidate_id = $1 ORDER BY platform, id`,
     [candidateId],
   );
+
+  if (!options?.includeProposals) {
+    return {
+      socials: socialRowsRaw as unknown as SocialLink[],
+    };
+  }
+
+  const proposalRowsRaw = await sql.query(
+    `SELECT tse_file_id, title, local_url
+       FROM candidate_proposals
+      WHERE candidate_id = $1
+      ORDER BY id`,
+    [candidateId],
+  ) as Array<{ tse_file_id: string; title: string; local_url: string | null }>;
+
+  const proposals = proposalRowsRaw.map((proposal) => ({
+    id: proposal.tse_file_id,
+    title: proposal.title,
+    url: proposal.local_url || candidateProposalPublicUrl(proposal.tse_file_id),
+  }));
+
   return {
     socials: socialRowsRaw as unknown as SocialLink[],
+    proposals,
   };
 }
 
@@ -109,6 +140,7 @@ export function candidateFromSummary(summary: CandidateSummary): Candidate {
     socials: extended.socials ?? [],
     assets: extended.assets ?? [],
     sourceUpdatedAt: extended.sourceUpdatedAt ?? null,
+    proposals: extended.proposals,
   };
 }
 
@@ -132,15 +164,16 @@ async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate
   const rows = await sql.query(
     `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
             ballot_number, ballot_name, full_name, party_acronym, status,
-            birth_date::text, gender, marital_status, occupation, education, photo_url, tse_url, source,
+            birth_date::text, gender, marital_status, nationality, birthplace,
+            occupation, education, photo_url, tse_url, source,
             source_updated_at::text
        FROM candidates WHERE sq_candidate = $1 LIMIT 1`,
     [sqCandidate],
   ) as CandidateRow[];
   const row = rows[0];
   if (!row) return null;
-  const related = await loadRelated(row.id);
-  return mapRow(row, related.socials);
+  const related = await loadRelated(row.id, { includeProposals: true });
+  return mapRow(row, related);
 }
 
 export async function listPartiesForOffice(input: {
@@ -344,7 +377,8 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   const rows = await sql.query(
     `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
             ballot_number, ballot_name, full_name, party_acronym, status,
-            birth_date::text, gender, marital_status, occupation, education, photo_url, tse_url, source,
+            birth_date::text, gender, marital_status, nationality, birthplace,
+            occupation, education, photo_url, tse_url, source,
             source_updated_at::text
        FROM candidates WHERE id::text = $1 LIMIT 1`,
     [id],
@@ -352,9 +386,9 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   const row = rows[0];
   if (!row) return null;
   if (row.sq_candidate === TERESINHA_SQ_CANDIDATE) {
-    const related = await loadRelated(row.id);
-    return hydrateCandidateDetails(withFixedSlotIdentity(mapRow(row, related.socials)));
+    const related = await loadRelated(row.id, { includeProposals: true });
+    return hydrateCandidateDetails(withFixedSlotIdentity(mapRow(row, related)));
   }
-  const related = await loadRelated(row.id);
-  return hydrateCandidateDetails(mapRow(row, related.socials));
+  const related = await loadRelated(row.id, { includeProposals: true });
+  return hydrateCandidateDetails(mapRow(row, related));
 }

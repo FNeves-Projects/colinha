@@ -15,10 +15,14 @@ export function tseProposalDocumentUrl(idArquivo: number | string) {
   return `${DIVULGA_BASE}/rest/arquivo/doc/${idArquivo}`;
 }
 
-export function proposalPdfApiUrl(fileId: string, download = false) {
+export function proposalPdfApiUrl(proposal: Pick<CandidateProposal, "id" | "url">, download = false) {
+  if (proposal.url.startsWith("/candidate-proposals/")) {
+    return download ? `${proposal.url}?download=1` : proposal.url;
+  }
+
   const params = new URLSearchParams({
     proposalPdf: "1",
-    fileId,
+    fileId: proposal.id,
   });
   if (download) params.set("download", "1");
   return `/api/candidates?${params}`;

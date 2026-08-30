@@ -790,8 +790,8 @@ function ProposalPdfModal({
   proposal: CandidateProposal;
   onClose: () => void;
 }) {
-  const previewUrl = proposalPdfApiUrl(proposal.id);
-  const downloadUrl = proposalPdfApiUrl(proposal.id, true);
+  const previewUrl = proposalPdfApiUrl(proposal);
+  const downloadUrl = proposalPdfApiUrl(proposal, true);
   const fileName = proposalDownloadFileName(proposal.title);
 
   useEffect(() => {

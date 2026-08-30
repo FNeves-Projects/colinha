@@ -11,6 +11,7 @@
     "sync": "tsx --require ./scripts/register-server-only.cjs scripts/sync.ts",
     "sync:tse": "tsx --require ./scripts/register-server-only.cjs scripts/sync-tse.ts",
     "sync:photos": "tsx --require ./scripts/register-server-only.cjs scripts/sync-photos.ts",
+    "sync:details": "tsx --require ./scripts/register-server-only.cjs scripts/sync-details.ts",
     "sync:party-logos": "tsx --require ./scripts/register-server-only.cjs scripts/sync-party-logos.ts",
     "photos": "npm run sync:photos",
     "repair:socials": "tsx --require ./scripts/register-server-only.cjs scripts/repair-social-links.ts",

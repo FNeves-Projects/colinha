@@ -63,7 +63,7 @@ function cleanLiveValue(value?: string | null) {
   return clean && !["#NULO#", "#NE", "-1"].includes(clean) ? clean : null;
 }
 
-function formatBirthplace(detail: DivulgaDetail) {
+export function formatBirthplace(detail: Pick<DivulgaDetail, "descricaoNaturalidade" | "nomeMunicipioNascimento" | "sgUfNascimento">) {
   const naturalidade = cleanLiveValue(detail.descricaoNaturalidade);
   if (naturalidade && !/null/i.test(naturalidade)) return naturalidade;
 
