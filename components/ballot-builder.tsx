@@ -791,7 +791,8 @@ function ProposalPdfModal({
   proposal: CandidateProposal;
   onClose: () => void;
 }) {
-  const previewUrl = `${proposalPdfApiUrl(proposal)}#toolbar=0&navpanes=0&view=FitH`;
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const previewUrl = proposalPdfApiUrl(proposal);
   const downloadUrl = proposalPdfApiUrl(proposal, true);
   const fileName = proposalDownloadFileName(proposal.title);
 
@@ -803,13 +804,11 @@ function ProposalPdfModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+  function handlePrint() {
+    const frame = frameRef.current;
+    frame?.contentWindow?.focus();
+    frame?.contentWindow?.print();
+  }
 
   function handleDownload() {
     const link = document.createElement("a");
@@ -822,9 +821,9 @@ function ProposalPdfModal({
   }
 
   return createPortal(
-    <div className="pdf-preview-backdrop proposal-pdf-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="pdf-preview-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className="pdf-preview-modal proposal-pdf-modal"
+        className="pdf-preview-modal"
         role="dialog"
         aria-modal="true"
         aria-label={`Visualizar proposta: ${proposal.title}`}
@@ -836,13 +835,17 @@ function ProposalPdfModal({
             <X size={21} />
           </button>
         </div>
-        <div className="pdf-preview-frame-wrap proposal-pdf-frame-wrap">
-          <iframe className="pdf-preview-frame" src={previewUrl} title={proposal.title} />
+        <div className="pdf-preview-frame-wrap">
+          <iframe ref={frameRef} className="pdf-preview-frame" src={previewUrl} title={proposal.title} />
         </div>
         <div className="pdf-preview-actions">
-          <button className="btn-glass btn-glass--primary btn-glass--lg" type="button" onClick={handleDownload}>
+          <button className="btn-glass btn-glass--lg" type="button" onClick={handleDownload}>
             <Save size={18} strokeWidth={2.2} aria-hidden="true" />
             Baixar PDF
+          </button>
+          <button className="btn-glass btn-glass--primary btn-glass--lg" type="button" onClick={handlePrint}>
+            <Printer size={18} strokeWidth={2.2} aria-hidden="true" />
+            Imprimir
           </button>
         </div>
       </section>
