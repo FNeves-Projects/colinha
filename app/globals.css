@@ -210,7 +210,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   color: var(--blue);
   background: #edf2ff;
 }
-.selected-number { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.selected-number { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: fit-content; }
 .number-boxes { display: inline-flex; gap: 4px; }
 .number-box {
   display: grid;
@@ -281,13 +281,16 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .paper-warning { margin: 10px 0 0; padding: 10px; border-radius: 12px; color: #7c4d00; background: #fff6df; font-size: 11px; font-weight: 700; text-align: center; }
 .ballot-footer { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 9px; border-top: 1px dashed #ccd1d9; color: #475467; font-size: 7px; }
 .ballot-footer strong { color: var(--blue-dark); }
-.action-buttons { display: grid; grid-template-columns: 1fr 1.35fr; gap: 9px; margin-top: 14px; }
+.action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
+.action-buttons .save-button { grid-column: 1 / -1; }
 .action-buttons button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 47px; border: 0; border-radius: 12px; cursor: pointer; font-weight: 850; font-size: 12px; transition: transform .15s, filter .15s; }
 .action-buttons button:hover { filter: brightness(.97); transform: translateY(-1px); }
 .action-buttons button:disabled { opacity: .65; cursor: wait; transform: none; }
 .save-button { color: var(--blue-dark); background: #e7edfb; }
 .share-button { color: white; background: var(--green); box-shadow: 0 8px 18px rgba(21,148,71,.22); }
+.whatsapp-button { color: white; background: #1fa855; box-shadow: 0 8px 18px rgba(31,168,85,.22); }
 .action-buttons .button-spinner { border-color: rgba(255,255,255,.35); border-top-color: currentColor; }
+.save-button .button-spinner { border-color: rgba(23,55,127,.18); border-top-color: var(--blue); }
 .privacy-note, .notice { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 11px 0 0; color: var(--muted); font-size: 9.5px; }
 .notice { min-height: 14px; color: var(--green-dark); font-weight: 700; }
 

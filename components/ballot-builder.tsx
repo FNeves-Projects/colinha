@@ -11,7 +11,6 @@ import {
   Info,
   LockKeyhole,
   Search,
-  Share2,
   Volume2,
   VolumeX,
   X,
@@ -137,12 +136,12 @@ function SelectedOfficeCard({
         )}
       </div>
       <div className="selected-number">
-        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
         {mode === "interactive" && !office.fixed && onClear && (
           <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
             <ArrowLeftRight size={16} strokeWidth={2.2} />
           </button>
         )}
+        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
       </div>
     </article>
   );
@@ -344,7 +343,7 @@ export function BallotBuilder() {
   const [muted, setMuted] = useState(false);
   const [profile, setProfile] = useState<Candidate | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [working, setWorking] = useState<"save" | "share" | null>(null);
+  const [working, setWorking] = useState<"save" | "share" | "whatsapp" | null>(null);
   const [notice, setNotice] = useState("");
   const ballotRef = useRef<HTMLDivElement>(null);
   const refreshedSavedSelections = useRef(false);
@@ -496,6 +495,28 @@ export function BallotBuilder() {
     return `minha-colinha-2026-${new Date().toISOString().slice(0, 10)}.pdf`;
   }
 
+  function buildBallotShareText() {
+    const lines = OFFICES.map((office) => {
+      const candidate = selections[office.id];
+      if (!candidate) return `${office.label}: escolha pendente`;
+      return `${office.label}: ${candidate.ballotName} — nº ${candidate.ballotNumber}`;
+    });
+
+    return [
+      "Minha colinha 2026 — São Paulo",
+      "",
+      ...lines,
+      "",
+      "Confira número e foto antes de apertar CONFIRMA.",
+      window.location.origin,
+    ].join("\n");
+  }
+
+  function openWhatsAppShare(text: string) {
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.location.href = url;
+  }
+
   async function saveBallot() {
     setWorking("save");
     try {
@@ -518,17 +539,12 @@ export function BallotBuilder() {
         await navigator.share({
           files: [file],
           title: "Minha colinha 2026",
-          text: "Minha colinha para a eleição de 2026.",
+          text: buildBallotShareText(),
         });
         setNotice("Colinha compartilhada.");
       } else {
         pdf.save(fileName());
-        window.open(
-          `https://wa.me/?text=${encodeURIComponent("Minha colinha 2026 está pronta. Vou anexar o PDF que acabei de salvar.")}`,
-          "_blank",
-          "noopener,noreferrer",
-        );
-        setNotice("Salvamos o PDF e abrimos o WhatsApp para você anexar.");
+        setNotice("PDF salvo. Use WhatsApp para enviar a colinha em texto ou anexe o arquivo.");
       }
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
@@ -536,6 +552,18 @@ export function BallotBuilder() {
       }
     } finally {
       setWorking(null);
+    }
+  }
+
+  function shareBallotOnWhatsApp() {
+    setWorking("whatsapp");
+    try {
+      openWhatsAppShare(buildBallotShareText());
+      setNotice("Abrindo WhatsApp…");
+    } catch {
+      setNotice("Não foi possível abrir o WhatsApp agora.");
+    } finally {
+      window.setTimeout(() => setWorking(null), 400);
     }
   }
 
@@ -645,8 +673,10 @@ export function BallotBuilder() {
               Salvar colinha
             </button>
             <button className="share-button" type="button" onClick={shareBallot} disabled={working !== null}>
-              {working === "share" ? <span className="button-spinner" /> : <Share2 size={19} />}
-              Compartilhar colinha
+              {working === "share" ? <span className="button-spinner" /> : "Compartilhar"}
+            </button>
+            <button className="whatsapp-button" type="button" onClick={shareBallotOnWhatsApp} disabled={working !== null}>
+              {working === "whatsapp" ? <span className="button-spinner" /> : "WhatsApp"}
             </button>
           </div>
           <p className="privacy-note"><LockKeyhole size={14} /> Suas escolhas ficam somente neste aparelho.</p>
