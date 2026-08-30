@@ -1,6 +1,7 @@
 import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
 import { getSql } from "./db";
+import { TSE_ELECTION_ID_2026, tseCandidatePhotoUrl, tseCandidateUrl } from "./tse-urls";
 
 type CsvRow = Record<string, string>;
 
@@ -68,7 +69,7 @@ const DEFAULT_ASSETS_URL =
   "https://cdn.tse.jus.br/estatistica/sead/odsele/bem_candidato/bem_candidato_2026.zip";
 
 const DIVULGA_BASE = "https://divulgacandcontas.tse.jus.br/divulga";
-const DIVULGA_ELECTION_ID = "20322002026";
+const DIVULGA_ELECTION_ID = TSE_ELECTION_ID_2026;
 const MIRROR_COMMIT = "e81e41d02a14d84c26b84bcb3c1ed72b58697616";
 const MIRROR_BASE = `https://raw.githubusercontent.com/leofn/tse-candidatos-2026/${MIRROR_COMMIT}/dados`;
 const MIRROR_CANDIDATE_URLS = [
@@ -263,8 +264,8 @@ async function upsertCandidates(rows: CsvRow[]) {
       gender: nullable(row.DS_GENERO),
       race: nullable(row.DS_COR_RACA),
       marital_status: nullable(row.DS_ESTADO_CIVIL),
-      photo_url: null,
-      tse_url: null,
+      photo_url: tseCandidatePhotoUrl(row.SQ_CANDIDATO),
+      tse_url: tseCandidateUrl(row.SG_UF === "BRASIL" ? "BR" : row.SG_UF, row.SQ_CANDIDATO),
       source_updated_at: csvSourceTimestamp(row),
     }))
     .filter((row) => row.sq_candidate && row.ballot_number && row.ballot_name);
@@ -327,8 +328,8 @@ async function syncDivulgaCand() {
         gender: row.descricaoSexo?.trim() || null,
         race: row.descricaoCorRaca?.trim() || null,
         marital_status: row.descricaoEstadoCivil?.trim() || null,
-        photo_url: safeTseUrl(row.fotoUrl),
-        tse_url: `${DIVULGA_BASE}/#/candidato/2026/${DIVULGA_ELECTION_ID}/${target.uf}/${id}`,
+        photo_url: safeTseUrl(row.fotoUrl) ?? tseCandidatePhotoUrl(id),
+        tse_url: tseCandidateUrl(target.uf, id),
         source_updated_at: now,
       }];
     });

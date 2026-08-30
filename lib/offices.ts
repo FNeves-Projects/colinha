@@ -1,3 +1,5 @@
+import { TERESINHA_SQ_CANDIDATE, tseCandidatePhotoUrl, tseCandidateUrl } from "./tse-urls";
+
 export type Office = {
   id: string;
   label: string;
@@ -19,23 +21,23 @@ export const OFFICES: Office[] = [
 
 export const TERESINHA: import("./types").Candidate = {
   id: "campaign-teresinha-neves-2026",
-  sqCandidate: "campaign-teresinha-neves-2026",
+  sqCandidate: TERESINHA_SQ_CANDIDATE,
   electionYear: 2026,
   uf: "SP",
   officeCode: 6,
   officeName: "Deputada Federal",
   ballotNumber: "3088",
   ballotName: "Teresinha Neves",
-  fullName: "Teresinha Neves",
+  fullName: "Teresinha de Almeida Ramos Neves",
   partyAcronym: "NOVO",
-  status: "Candidatura da campanha",
+  status: "Registro no TSE",
   birthDate: null,
   occupation: null,
   education: null,
-  photoUrl: "/assets/teresinha-neves.jpg",
-  tseUrl: null,
+  photoUrl: tseCandidatePhotoUrl(TERESINHA_SQ_CANDIDATE),
+  tseUrl: tseCandidateUrl("SP", TERESINHA_SQ_CANDIDATE),
   socials: [],
   assets: [],
-  source: "Campanha",
+  source: "TSE",
   sourceUpdatedAt: null,
 };
