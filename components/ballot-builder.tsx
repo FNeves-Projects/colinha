@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
@@ -107,27 +106,32 @@ function CandidatePhoto({
   candidate,
   size = 58,
   className = "candidate-photo",
+  priority = false,
 }: {
   candidate: CandidateSummary;
   size?: number;
   className?: string;
+  priority?: boolean;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
     setImageFailed(false);
-  }, [candidate.photoUrl]);
+  }, [candidate.id, candidate.photoUrl]);
 
   if (candidate.photoUrl && !imageFailed) {
     return (
-      <Image
+      // Native img keeps each candidate photo distinct for html-to-image export.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        key={`${candidate.id}-${candidate.photoUrl}`}
         className={className}
         src={candidate.photoUrl}
         alt={`Foto de ${candidate.ballotName}`}
         width={size}
         height={size}
-        sizes={`${size}px`}
-        unoptimized={candidate.photoUrl.startsWith("http")}
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
         crossOrigin={candidate.photoUrl.startsWith("http") ? "anonymous" : undefined}
         onError={() => setImageFailed(true)}
       />
@@ -153,7 +157,15 @@ function NumberBoxes({ number, digits }: { number?: string; digits: number }) {
   );
 }
 
-function PartyBadge({ acronym, variant = "live" }: { acronym: string | null | undefined; variant?: "live" | "share" }) {
+function PartyBadge({
+  acronym,
+  variant = "live",
+  priority = false,
+}: {
+  acronym: string | null | undefined;
+  variant?: "live" | "share";
+  priority?: boolean;
+}) {
   if (!acronym) return null;
   const logoUrl = partyLogoUrl(acronym);
   const fallback = partyBadgeFallback(acronym);
@@ -161,7 +173,15 @@ function PartyBadge({ acronym, variant = "live" }: { acronym: string | null | un
     <div className={`party-badge${variant === "share" ? " party-badge-share" : ""}`}>
       {logoUrl ? (
         <span className="party-badge-logo">
-          <Image src={logoUrl} alt="" width={52} height={52} unoptimized />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logoUrl}
+            alt=""
+            width={52}
+            height={52}
+            loading={priority ? "eager" : "lazy"}
+            decoding="async"
+          />
         </span>
       ) : (
         <span className="party-badge-mark" style={{ background: fallback.background, color: fallback.color }}>
@@ -189,16 +209,108 @@ function fixedSlotRowProps(partyAcronym: string | null | undefined) {
   };
 }
 
+function collectBallotPhotoUrls(
+  selections: Selections,
+  ticketSlates: Record<string, CandidateSummary[]>,
+  showViceOnBallot: boolean,
+) {
+  const urls = new Set<string>();
+  for (const office of OFFICES) {
+    const selection = selections[office.id];
+    if (selection?.type !== "candidate") continue;
+    if (selection.candidate.photoUrl) urls.add(selection.candidate.photoUrl);
+    if (showViceOnBallot) {
+      const vice = previewViceCandidate(office, ticketSlates[office.id]);
+      if (vice?.photoUrl) urls.add(vice.photoUrl);
+    }
+  }
+  return [...urls];
+}
+
+async function preloadImageUrls(urls: string[]) {
+  await Promise.all(
+    urls.map(
+      (url) =>
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          if (url.startsWith("http")) img.crossOrigin = "anonymous";
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          img.src = url;
+        }),
+    ),
+  );
+}
+
+async function waitForBallotImages(node: HTMLElement) {
+  const images = Array.from(node.querySelectorAll("img"));
+  await Promise.all(
+    images.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete && img.naturalWidth > 0) {
+            resolve();
+            return;
+          }
+          img.loading = "eager";
+          const finish = () => resolve();
+          img.addEventListener("load", finish, { once: true });
+          img.addEventListener("error", finish, { once: true });
+        }),
+    ),
+  );
+}
+
+function BallotSheetContent({
+  selections,
+  showViceOnBallot,
+  ticketSlates,
+  duplicateSenator,
+  imagePriority = false,
+}: {
+  selections: Selections;
+  showViceOnBallot: boolean;
+  ticketSlates: Record<string, CandidateSummary[]>;
+  duplicateSenator: boolean;
+  imagePriority?: boolean;
+}) {
+  return (
+    <>
+      <p className="ballot-sheet-meta">{BALLOT_META_LABEL}</p>
+      <div className="ballot-sheet-rows">
+        {OFFICES.map((office) => (
+          <BallotPreviewRow
+            key={office.id}
+            office={office}
+            selection={selections[office.id]}
+            showViceOnBallot={showViceOnBallot}
+            slate={ticketSlates[office.id]}
+            imagePriority={imagePriority}
+          />
+        ))}
+      </div>
+      {duplicateSenator && (
+        <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
+      )}
+      <p className="ballot-sheet-footer">
+        Monte a sua em <strong>colinha.2026</strong>
+      </p>
+    </>
+  );
+}
+
 function BallotPreviewRow({
   office,
   selection,
   showViceOnBallot,
   slate,
+  imagePriority = false,
 }: {
   office: Office;
   selection: OfficeSelection;
   showViceOnBallot: boolean;
   slate?: CandidateSummary[];
+  imagePriority?: boolean;
 }) {
   const officeLabel = previewOfficeLabel(office.id, office.label);
 
@@ -238,10 +350,15 @@ function BallotPreviewRow({
     <div className={`ballot-row${fixedProps?.className ?? ""}`} style={fixedProps?.style}>
       <div className={`ballot-row-photo${vice ? " is-duo" : ""}`}>
         <div className="ballot-row-photo-main">
-          <CandidatePhoto candidate={candidate} size={68} />
+          <CandidatePhoto candidate={candidate} size={68} priority={imagePriority} />
         </div>
         {vice ? (
-          <CandidatePhoto candidate={vice} className="candidate-photo ballot-vice-photo" size={52} />
+          <CandidatePhoto
+            candidate={vice}
+            className="candidate-photo ballot-vice-photo"
+            size={52}
+            priority={imagePriority}
+          />
         ) : null}
       </div>
       <div className="ballot-row-main">
@@ -260,7 +377,7 @@ function BallotPreviewRow({
         </div>
       </div>
       <div className="ballot-row-party">
-        <PartyBadge acronym={candidate.partyAcronym} variant="live" />
+        <PartyBadge acronym={candidate.partyAcronym} variant="live" priority={imagePriority} />
       </div>
     </div>
   );
@@ -328,7 +445,7 @@ function OfficeCardFace({
       <div className={`selected-number${!fixed && onSwap ? " has-swap-action" : ""}`}>
         {!fixed && onSwap && (
           <button
-            className="swap-button swap-button-rail"
+            className="btn-glass btn-glass--chip swap-button swap-button-rail"
             type="button"
             onClick={(event) => { event.stopPropagation(); onSwap(); }}
             aria-label={`Trocar ${office.label}`}
@@ -376,7 +493,7 @@ function SpecialVoteCard({
         </small>
       </div>
       <div className="selected-number has-swap-action">
-        <button className="swap-button swap-button-rail" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
+        <button className="btn-glass btn-glass--chip swap-button swap-button-rail" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
           <ArrowLeftRight size={16} strokeWidth={2.2} />
         </button>
         {vote === "branco" ? (
@@ -632,7 +749,7 @@ function ProfileContent({
                 <li key={mate.id}>
                   <button
                     type="button"
-                    className="profile-slate-card"
+                    className="btn-glass btn-glass--list profile-slate-card"
                     onClick={() => onInspectMate?.(mate)}
                     aria-label={`Ver informações de ${mate.ballotName}`}
                   >
@@ -656,7 +773,7 @@ function ProfileContent({
           <p className="source-note">Links declarados à Justiça Eleitoral.</p>
           <div className="social-links">
             {socials.map((social) => (
-              <a href={social.url} target="_blank" rel="noopener noreferrer" key={social.url}>
+              <a className="btn-glass btn-glass--sm" href={social.url} target="_blank" rel="noopener noreferrer" key={social.url}>
                 <SocialNetworkIcon platform={social.platform} /> {social.label} <ExternalLink size={13} />
               </a>
             ))}
@@ -665,7 +782,7 @@ function ProfileContent({
       )}
 
       {tseHref && (
-        <a className="tse-link" href={tseHref} target="_blank" rel="noopener noreferrer">
+        <a className="btn-glass btn-glass--sm btn-glass--block tse-link" href={tseHref} target="_blank" rel="noopener noreferrer">
           Ver candidato no site do TSE <ExternalLink size={15} />
         </a>
       )}
@@ -694,7 +811,7 @@ function CandidateProfile({
           aria-label={`Informações de ${candidate.ballotName}`}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <button className="drawer-close" type="button" onClick={onClose} aria-label="Fechar informações">
+          <button className="btn-glass btn-glass--icon-sm drawer-close" type="button" onClick={onClose} aria-label="Fechar informações">
             <X size={21} />
           </button>
           <ProfileContent candidate={candidate} onInspectMate={onInspectMate} />
@@ -709,7 +826,7 @@ function CandidateProfile({
       role="region"
       aria-label={`Informações de ${candidate.ballotName}`}
     >
-      <button className="profile-panel-close" type="button" onClick={onClose} aria-label="Fechar informações">
+      <button className="btn-glass btn-glass--icon-sm profile-panel-close" type="button" onClick={onClose} aria-label="Fechar informações">
         <X size={20} />
       </button>
       <ProfileContent candidate={candidate} onInspectMate={onInspectMate} />
@@ -937,11 +1054,18 @@ export function BallotBuilder() {
   async function captureBallotImage() {
     const captureNode = ballotRef.current;
     if (!captureNode) throw new Error("Colinha indisponível");
-    await new Promise((resolve) => window.setTimeout(resolve, 120));
+
+    captureNode.scrollIntoView({ block: "center" });
+    await preloadImageUrls(collectBallotPhotoUrls(selections, ticketSlates, showViceOnBallot));
+    await new Promise((resolve) => window.setTimeout(resolve, 200));
+    await waitForBallotImages(captureNode);
+
     return toPng(captureNode, {
       cacheBust: true,
       pixelRatio: 2,
       backgroundColor: previewTheme === "dark" ? "#0d0f14" : "#ffffff",
+      includeQueryParams: true,
+      fetchRequestInit: { mode: "cors", cache: "no-cache" },
     });
   }
 
@@ -964,6 +1088,48 @@ export function BallotBuilder() {
     const response = await fetch(dataUrl);
     const blob = await response.blob();
     return new File([blob], pngFileName(), { type: "image/png" });
+  }
+
+  async function copyImageToClipboard(dataUrl: string) {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") return false;
+    try {
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function shareImageNative(file: File, options?: { text?: string; title?: string }) {
+    if (typeof navigator.share !== "function") return false;
+
+    const attempts: ShareData[] = [
+      { files: [file], title: options?.title ?? "Minha colinha 2026" },
+      { files: [file] },
+    ];
+    if (options?.text) {
+      attempts.unshift({ files: [file], text: options.text, title: options?.title ?? "Minha colinha 2026" });
+    }
+
+    for (const payload of attempts) {
+      try {
+        if (navigator.canShare && !navigator.canShare(payload)) continue;
+        await navigator.share(payload);
+        return true;
+      } catch (error) {
+        if ((error as Error).name === "AbortError") throw error;
+      }
+    }
+
+    try {
+      await navigator.share({ files: [file], title: options?.title ?? "Minha colinha 2026" });
+      return true;
+    } catch (error) {
+      if ((error as Error).name === "AbortError") throw error;
+      return false;
+    }
   }
 
   async function buildPdfFromImage(image: string) {
@@ -1013,8 +1179,12 @@ export function BallotBuilder() {
   }
 
   function openWhatsAppShare(text: string) {
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.location.href = url;
+    const encoded = encodeURIComponent(text);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const url = isMobile
+      ? `whatsapp://send?text=${encoded}`
+      : `https://api.whatsapp.com/send?text=${encoded}`;
+    window.location.assign(url);
   }
 
   async function saveBallot() {
@@ -1047,16 +1217,30 @@ export function BallotBuilder() {
   async function shareBallotOnWhatsApp() {
     setWorking("whatsapp");
     try {
-      const result = await sharePngFile("Minha colinha 2026 — São Paulo");
-      if (result === "shared") {
-        setNotice("Escolha WhatsApp para enviar a imagem.");
-      } else {
-        setNotice("PNG salvo. Abra o WhatsApp e anexe a imagem baixada.");
-        openWhatsAppShare("Minha colinha 2026 — anexe a imagem que acabei de salvar.");
+      const dataUrl = await captureBallotImage();
+      const file = await createPngFile(dataUrl);
+      const shared = await shareImageNative(file, {
+        title: "Minha colinha 2026",
+        text: "Minha colinha 2026 — São Paulo",
+      });
+
+      if (shared) {
+        setNotice("Toque em WhatsApp para enviar a imagem.");
+        return;
       }
+
+      if (await copyImageToClipboard(dataUrl)) {
+        openWhatsAppShare("Minha colinha 2026 — cole a imagem no chat.");
+        setNotice("Imagem copiada. Abra o WhatsApp e cole.");
+        return;
+      }
+
+      downloadPng(dataUrl);
+      openWhatsAppShare("Minha colinha 2026 — anexe a imagem PNG que acabou de baixar.");
+      setNotice("Imagem salva. No WhatsApp, anexe o arquivo.");
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
-        setNotice("Não foi possível compartilhar a imagem agora. Tente salvar a colinha.");
+        setNotice("Não foi possível compartilhar no WhatsApp agora.");
       }
     } finally {
       setWorking(null);
@@ -1067,16 +1251,10 @@ export function BallotBuilder() {
     setWorking("print");
     try {
       const { pdf } = await createPdfFile();
-      pdf.autoPrint();
-      const printWindow = window.open(pdf.output("bloburl"), "_blank");
-      if (!printWindow) {
-        pdf.save(pdfFileName());
-        setNotice("PDF salvo. Abra o arquivo para imprimir.");
-        return;
-      }
-      setNotice("PDF aberto para impressão.");
+      pdf.save(pdfFileName());
+      setNotice("Sua colinha foi salva em PDF.");
     } catch {
-      setNotice("Não foi possível imprimir agora. Tente novamente.");
+      setNotice("Não foi possível salvar agora. Tente novamente.");
     } finally {
       setWorking(null);
     }
@@ -1085,33 +1263,30 @@ export function BallotBuilder() {
   return (
     <main>
       <header className="hero">
-        <nav className="hero-nav">
+        <div className="hero-bar">
           <div className="brand" aria-label="Colinha 2026">
             <span className="brand-mark"><Check size={19} strokeWidth={3} /></span>
             <span>colinha<span>.2026</span></span>
           </div>
+          <div className="hero-meta" aria-label="Informações da eleição">
+            <p className="eyebrow">Eleição 2026 · São Paulo</p>
+            <div className="hero-trust">
+              <span><Check size={14} aria-hidden="true" /> Dados do TSE</span>
+              <span><Check size={14} aria-hidden="true" /> Salvo no aparelho</span>
+            </div>
+          </div>
           <button
-            className="sound-toggle"
+            className="btn-glass btn-glass--hero sound-toggle"
             type="button"
             onClick={() => {
               if (muted) playUrnaSound();
               setMuted((value) => !value);
             }}
+            aria-label={muted ? "Ativar som da urna" : "Desativar som da urna"}
           >
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
-            {muted ? "Som desligado" : "Som ligado"}
+            <span className="sound-toggle-label">{muted ? "Som desligado" : "Som ligado"}</span>
           </button>
-        </nav>
-        <div className="hero-content">
-          <p className="eyebrow">Eleição 2026 · São Paulo</p>
-          <h1>Sua escolha, na<br />ordem certa.</h1>
-          <p className="hero-lead">
-            Busque seus candidatos, confira os dados e leve sua colinha com você no dia da votação.
-          </p>
-          <div className="trust-row">
-            <span><Check size={15} /> Dados do TSE</span>
-            <span><Check size={15} /> Salvo no seu aparelho</span>
-          </div>
         </div>
       </header>
 
@@ -1177,35 +1352,24 @@ export function BallotBuilder() {
               </div>
               <div className={`ballot-frame${previewTheme === "dark" ? " ballot-frame--dark" : ""}`}>
                 <div
-                  className={`ballot-paper ballot-sheet${previewTheme === "dark" ? " ballot-preview-dark" : ""}`}
                   ref={ballotRef}
                   id="ballot-card"
+                  className={`ballot-paper ballot-sheet${previewTheme === "dark" ? " ballot-preview-dark" : ""}`}
                 >
-                  <p className="ballot-sheet-meta">{BALLOT_META_LABEL}</p>
-                  <div className="ballot-sheet-rows">
-                    {OFFICES.map((office) => (
-                      <BallotPreviewRow
-                        key={office.id}
-                        office={office}
-                        selection={selections[office.id]}
-                        showViceOnBallot={showViceOnBallot}
-                        slate={ticketSlates[office.id]}
-                      />
-                    ))}
-                  </div>
-                  {duplicateSenator && (
-                    <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
-                  )}
-                  <p className="ballot-sheet-footer">
-                    Monte a sua em <strong>colinha.2026</strong>
-                  </p>
+                  <BallotSheetContent
+                    selections={selections}
+                    showViceOnBallot={showViceOnBallot}
+                    ticketSlates={ticketSlates}
+                    duplicateSenator={duplicateSenator}
+                    imagePriority
+                  />
                 </div>
               </div>
 
               <div className="preview-options" role="group" aria-label="Opções da colinha">
                 <button
                   type="button"
-                  className={`preview-option-btn${previewTheme === "dark" ? " is-active" : ""}`}
+                  className={`btn-glass btn-glass--md preview-option-btn${previewTheme === "dark" ? " is-active" : ""}`}
                   aria-pressed={previewTheme === "dark"}
                   onClick={() => setPreviewTheme((theme) => (theme === "light" ? "dark" : "light"))}
                   aria-label={previewTheme === "light" ? "Tema escuro da imagem" : "Tema claro da imagem"}
@@ -1215,7 +1379,7 @@ export function BallotBuilder() {
                 </button>
                 <button
                   type="button"
-                  className={`preview-option-btn${showViceOnBallot ? " is-active" : ""}`}
+                  className={`btn-glass btn-glass--md preview-option-btn${showViceOnBallot ? " is-active" : ""}`}
                   aria-pressed={showViceOnBallot}
                   onClick={() => setShowViceOnBallot((value) => !value)}
                   aria-label={showViceOnBallot ? "Ocultar vice na colinha" : "Incluir vice na colinha"}
@@ -1225,43 +1389,65 @@ export function BallotBuilder() {
                 </button>
               </div>
 
-              <div className="action-buttons">
-                <button className="save-button" type="button" onClick={saveBallot} disabled={working !== null}>
-                  {working === "save" ? <span className="button-spinner" /> : <Save size={18} strokeWidth={2.2} />}
-                  Salvar arquivo
-                </button>
-                <button className="share-button" type="button" onClick={shareBallot} disabled={working !== null}>
-                  {working === "share" ? <span className="button-spinner" /> : <Share size={18} strokeWidth={2.2} />}
-                  Compartilhar
-                </button>
-                <button
-                  className="whatsapp-link"
-                  type="button"
-                  onClick={shareBallotOnWhatsApp}
-                  disabled={working !== null}
-                  aria-label="Compartilhar no WhatsApp"
-                >
-                  {working === "whatsapp" ? <span className="button-spinner" /> : <WhatsAppIcon size={26} />}
-                </button>
+              <div className="ballot-actions" aria-label="Exportar e compartilhar colinha">
+                <div className="action-row action-row-export" role="group" aria-label="Salvar e enviar colinha">
+                  <button
+                    className="btn-glass btn-glass--lg save-button"
+                    type="button"
+                    onClick={saveBallot}
+                    disabled={working !== null}
+                    aria-busy={working === "save"}
+                    aria-label="Salvar colinha como arquivo PNG"
+                  >
+                    {working === "save" ? <span className="button-spinner" aria-hidden="true" /> : <Save size={18} strokeWidth={2.2} aria-hidden="true" />}
+                    Salvar PNG
+                  </button>
+                  <button
+                    className="btn-glass btn-glass--primary btn-glass--lg share-button"
+                    type="button"
+                    onClick={shareBallot}
+                    disabled={working !== null}
+                    aria-busy={working === "share"}
+                    aria-label="Compartilhar colinha pelo menu do dispositivo"
+                  >
+                    {working === "share" ? <span className="button-spinner" aria-hidden="true" /> : <Share size={18} strokeWidth={2.2} aria-hidden="true" />}
+                    Compartilhar
+                  </button>
+                  <button
+                    className="btn-glass btn-glass--icon channel-button channel-button-pdf"
+                    type="button"
+                    onClick={printBallot}
+                    disabled={working !== null}
+                    aria-busy={working === "print"}
+                    aria-label="Salvar colinha em PDF"
+                  >
+                    {working === "print" ? <span className="button-spinner" aria-hidden="true" /> : <Printer size={22} strokeWidth={2.2} aria-hidden="true" />}
+                  </button>
+                  <button
+                    className="btn-glass btn-glass--whatsapp btn-glass--icon channel-button channel-button-whatsapp"
+                    type="button"
+                    onClick={shareBallotOnWhatsApp}
+                    disabled={working !== null}
+                    aria-busy={working === "whatsapp"}
+                    aria-label="Enviar colinha pelo WhatsApp"
+                  >
+                    {working === "whatsapp" ? <span className="button-spinner" aria-hidden="true" /> : <WhatsAppIcon size={26} />}
+                  </button>
+                </div>
               </div>
               <button
-                className="print-button"
-                type="button"
-                onClick={printBallot}
-                disabled={working !== null}
-              >
-                {working === "print" ? <span className="button-spinner" /> : <Printer size={18} strokeWidth={2.2} />}
-                Imprimir
-              </button>
-              <button
-                className="clear-ballot-button"
+                className="btn-glass btn-glass--ghost btn-glass--block btn-glass--lg clear-ballot-button"
                 type="button"
                 onClick={clearBallot}
                 disabled={!hasClearableSelections}
+                aria-label="Esvaziar colinha e remover candidatos escolhidos"
               >
                 Esvaziar colinha
               </button>
-              <p className="privacy-note"><LockKeyhole size={14} /> Suas escolhas ficam somente neste aparelho.</p>
+              <p className="privacy-note">
+                <LockKeyhole size={14} aria-hidden="true" />
+                Suas escolhas ficam somente neste aparelho.
+              </p>
             </>
           )}
         </aside>
