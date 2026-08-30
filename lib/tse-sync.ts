@@ -238,7 +238,10 @@ async function persistCandidates(normalized: NormalizedCandidate[]) {
         occupation = EXCLUDED.occupation, education = EXCLUDED.education,
         gender = EXCLUDED.gender, race = EXCLUDED.race,
         marital_status = EXCLUDED.marital_status,
-        photo_url = COALESCE(EXCLUDED.photo_url, candidates.photo_url),
+        photo_url = CASE
+          WHEN candidates.photo_url LIKE '%public.blob.vercel-storage.com/%' THEN candidates.photo_url
+          ELSE COALESCE(EXCLUDED.photo_url, candidates.photo_url)
+        END,
         tse_url = COALESCE(EXCLUDED.tse_url, candidates.tse_url),
         source = 'TSE', source_updated_at = EXCLUDED.source_updated_at,
         updated_at = now()`,
@@ -301,6 +304,14 @@ async function upsertCandidates(rows: CsvRow[]) {
     }))
     .filter((row) => row.sq_candidate && row.ballot_number && row.ballot_name);
 
+  const blobPhotos = await sql.query(
+    `SELECT sq_candidate, photo_url
+       FROM candidates
+      WHERE election_year = 2026
+        AND uf IN ('SP', 'BR')
+        AND photo_url LIKE '%public.blob.vercel-storage.com/%'`,
+  ) as Array<{ sq_candidate: string; photo_url: string }>;
+
   // The CSV is a complete SP + BR snapshot. Delete only previous TSE rows so
   // withdrawn candidates and fallback duplicates do not remain in the database.
   await sql.query(
@@ -308,6 +319,16 @@ async function upsertCandidates(rows: CsvRow[]) {
       WHERE election_year = 2026 AND uf IN ('SP', 'BR') AND source = 'TSE'`,
   );
   await persistCandidates(normalized);
+  if (blobPhotos.length) {
+    await sql.query(
+      `UPDATE candidates AS c
+          SET photo_url = x.photo_url,
+              updated_at = now()
+         FROM jsonb_to_recordset($1::jsonb) AS x(sq_candidate text, photo_url text)
+        WHERE c.sq_candidate = x.sq_candidate`,
+      [JSON.stringify(blobPhotos)],
+    );
+  }
   return normalized.length;
 }
 

@@ -320,6 +320,7 @@ export function BallotBuilder() {
   const [notice, setNotice] = useState("");
   const ballotRef = useRef<HTMLDivElement>(null);
   const refreshedSavedSelections = useRef(false);
+  const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     try {
@@ -341,10 +342,7 @@ export function BallotBuilder() {
     if (!hydrated || refreshedSavedSelections.current) return;
     refreshedSavedSelections.current = true;
 
-    const refreshableOffices = OFFICES.filter((office) => {
-      const candidate = selections[office.id];
-      return candidate && !office.fixed && candidate.id !== TERESINHA.id;
-    });
+    const refreshableOffices = OFFICES.filter((office) => Boolean(selections[office.id]));
     if (!refreshableOffices.length) return;
 
     let cancelled = false;
@@ -354,7 +352,10 @@ export function BallotBuilder() {
         if (!savedCandidate) return null;
 
         try {
-          const response = await fetch(`/api/candidates?id=${encodeURIComponent(savedCandidate.id)}`, {
+          const lookupId = office.fixed || savedCandidate.id === TERESINHA.id
+            ? TERESINHA.id
+            : savedCandidate.id;
+          const response = await fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, {
             cache: "no-store",
           });
           const data = await response.json();
@@ -363,6 +364,7 @@ export function BallotBuilder() {
           return {
             officeId: office.id,
             savedCandidateId: savedCandidate.id,
+            allowReplace: Boolean(office.fixed),
             candidate: sanitizeCandidateSummary(data.candidate as CandidateSummary),
           };
         } catch {
@@ -378,7 +380,7 @@ export function BallotBuilder() {
 
         for (const update of updates) {
           if (!update) continue;
-          if (current[update.officeId]?.id !== update.savedCandidateId) continue;
+          if (!update.allowReplace && current[update.officeId]?.id !== update.savedCandidateId) continue;
           next[update.officeId] = update.candidate;
           changed = true;
         }
@@ -393,6 +395,16 @@ export function BallotBuilder() {
   }, [hydrated, selections]);
 
   useEffect(() => {
+    const audio = new Audio("/sounds/urna-confirma.wav");
+    audio.preload = "auto";
+    urnaSoundRef.current = audio;
+    return () => {
+      audio.pause();
+      urnaSoundRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ selections, muted }));
   }, [hydrated, muted, selections]);
@@ -403,25 +415,17 @@ export function BallotBuilder() {
     return Boolean(first && second && first === second);
   }, [selections]);
 
+  function playUrnaSound() {
+    const audio = urnaSoundRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    void audio.play().catch(() => {});
+  }
+
   function playConfirmation() {
     if (muted) return;
-    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const context = new AudioContextClass();
-    const now = context.currentTime;
-    [0, 0.12].forEach((offset, index) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.value = index === 0 ? 880 : 1174.66;
-      gain.gain.setValueAtTime(0.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.12, now + offset + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.1);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(now + offset);
-      oscillator.stop(now + offset + 0.11);
-    });
-    window.setTimeout(() => void context.close(), 450);
+    playUrnaSound();
   }
 
   function selectCandidate(office: Office, candidate: CandidateSummary) {
@@ -432,13 +436,12 @@ export function BallotBuilder() {
   }
 
   async function inspectCandidate(candidate: CandidateSummary) {
-    if (candidate.id === TERESINHA.id) {
-      setProfile(TERESINHA);
-      return;
-    }
     setProfileLoading(true);
     try {
-      const response = await fetch(`/api/candidates?id=${encodeURIComponent(candidate.id)}`, { cache: "no-store" });
+      const lookupId = candidate.id === TERESINHA.id || candidate.sqCandidate === TERESINHA.sqCandidate
+        ? TERESINHA.id
+        : candidate.id;
+      const response = await fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, { cache: "no-store" });
       const data = await response.json();
       if (response.ok) setProfile(data.candidate);
     } finally {
@@ -516,7 +519,14 @@ export function BallotBuilder() {
             <span className="brand-mark"><Check size={19} strokeWidth={3} /></span>
             <span>colinha<span>.2026</span></span>
           </a>
-          <button className="sound-toggle" type="button" onClick={() => setMuted((value) => !value)}>
+          <button
+            className="sound-toggle"
+            type="button"
+            onClick={() => {
+              if (muted) playUrnaSound();
+              setMuted((value) => !value);
+            }}
+          >
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
             {muted ? "Som desligado" : "Som ligado"}
           </button>
@@ -530,7 +540,6 @@ export function BallotBuilder() {
           <div className="trust-row">
             <span><Check size={15} /> Dados do TSE</span>
             <span><Check size={15} /> Salvo no seu aparelho</span>
-            <span><Music2 size={15} /> Confirmação sonora</span>
           </div>
         </div>
       </header>

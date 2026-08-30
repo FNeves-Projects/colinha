@@ -1,5 +1,6 @@
 import { getSql, hasDatabase } from "./db";
 import { TERESINHA } from "./offices";
+import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
 import type { Candidate, CandidateSummary, DeclaredAsset, SocialLink } from "./types";
 
 type CandidateRow = {
@@ -53,6 +54,65 @@ function mapRow(row: CandidateRow, socials: SocialLink[] = [], assets: DeclaredA
   };
 }
 
+async function loadRelated(candidateId: string) {
+  const sql = getSql();
+  const [socialRowsRaw, assetRowsRaw] = await Promise.all([
+    sql.query(
+      `SELECT platform, url, handle FROM candidate_social_links
+        WHERE candidate_id = $1 ORDER BY platform, id`,
+      [candidateId],
+    ),
+    sql.query(
+      `SELECT asset_type AS type, description, value::float8 AS value
+         FROM declared_assets WHERE candidate_id = $1 ORDER BY value DESC`,
+      [candidateId],
+    ),
+  ]);
+  return {
+    socials: socialRowsRaw as unknown as SocialLink[],
+    assets: assetRowsRaw as unknown as DeclaredAsset[],
+  };
+}
+
+function overlayTeresinha(fromDb: Candidate): Candidate {
+  return {
+    ...TERESINHA,
+    photoUrl: fromDb.photoUrl ?? TERESINHA.photoUrl,
+    tseUrl: fromDb.tseUrl ?? TERESINHA.tseUrl,
+    status: fromDb.status ?? TERESINHA.status,
+    fullName: fromDb.fullName || TERESINHA.fullName,
+    partyAcronym: fromDb.partyAcronym ?? TERESINHA.partyAcronym,
+    occupation: fromDb.occupation ?? TERESINHA.occupation,
+    education: fromDb.education ?? TERESINHA.education,
+    birthDate: fromDb.birthDate ?? TERESINHA.birthDate,
+    socials: fromDb.socials,
+    assets: fromDb.assets,
+    sourceUpdatedAt: fromDb.sourceUpdatedAt,
+  };
+}
+
+export async function getLiveTeresinha(): Promise<Candidate> {
+  const fromDb = await getCandidateBySqCandidate(TERESINHA_SQ_CANDIDATE);
+  return fromDb ? overlayTeresinha(fromDb) : TERESINHA;
+}
+
+async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate | null> {
+  if (!hasDatabase()) return null;
+  const sql = getSql();
+  const rows = await sql.query(
+    `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
+            ballot_number, ballot_name, full_name, party_acronym, status,
+            birth_date::text, occupation, education, photo_url, tse_url, source,
+            source_updated_at::text
+       FROM candidates WHERE sq_candidate = $1 LIMIT 1`,
+    [sqCandidate],
+  ) as CandidateRow[];
+  const row = rows[0];
+  if (!row) return null;
+  const related = await loadRelated(row.id);
+  return mapRow(row, related.socials, related.assets);
+}
+
 export async function searchCandidates(input: {
   query: string;
   officeCode: number;
@@ -61,7 +121,7 @@ export async function searchCandidates(input: {
 }): Promise<CandidateSummary[]> {
   const query = input.query.trim();
   if (input.officeCode === 6 && (query === "3088" || /teresinha/i.test(query))) {
-    return [TERESINHA];
+    return [await getLiveTeresinha()];
   }
   if (!hasDatabase()) return [];
 
@@ -92,7 +152,9 @@ export async function searchCandidates(input: {
 }
 
 export async function getCandidateById(id: string): Promise<Candidate | null> {
-  if (id === TERESINHA.id) return TERESINHA;
+  if (id === TERESINHA.id || id === TERESINHA_SQ_CANDIDATE) {
+    return getLiveTeresinha();
+  }
   if (!hasDatabase()) return null;
   const sql = getSql();
   const rows = await sql.query(
@@ -105,20 +167,10 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   ) as CandidateRow[];
   const row = rows[0];
   if (!row) return null;
-
-  const [socialRowsRaw, assetRowsRaw] = await Promise.all([
-    sql.query(
-      `SELECT platform, url, handle FROM candidate_social_links
-        WHERE candidate_id = $1 ORDER BY platform, id`,
-      [row.id],
-    ),
-    sql.query(
-      `SELECT asset_type AS type, description, value::float8 AS value
-         FROM declared_assets WHERE candidate_id = $1 ORDER BY value DESC`,
-      [row.id],
-    ),
-  ]);
-  const socialRows = socialRowsRaw as unknown as SocialLink[];
-  const assetRows = assetRowsRaw as unknown as DeclaredAsset[];
-  return mapRow(row, socialRows, assetRows);
+  if (row.sq_candidate === TERESINHA_SQ_CANDIDATE) {
+    const related = await loadRelated(row.id);
+    return overlayTeresinha(mapRow(row, related.socials, related.assets));
+  }
+  const related = await loadRelated(row.id);
+  return mapRow(row, related.socials, related.assets);
 }
