@@ -530,7 +530,6 @@ export function BallotBuilder() {
           <div className="trust-row">
             <span><Check size={15} /> Dados do TSE</span>
             <span><Check size={15} /> Salvo no seu aparelho</span>
-            <span><Music2 size={15} /> Confirmação sonora</span>
           </div>
         </div>
       </header>
