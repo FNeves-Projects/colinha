@@ -7,10 +7,8 @@ import { jsPDF } from "jspdf";
 import {
   Check,
   ExternalLink,
-  Globe2,
   Info,
   LockKeyhole,
-  Music2,
   Search,
   Share2,
   Volume2,
@@ -18,7 +16,10 @@ import {
   X,
 } from "lucide-react";
 import { OFFICES, TERESINHA, type Office } from "@/lib/offices";
+import { normalizeSocialLinks } from "@/lib/social-links";
+import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
+import { SocialNetworkIcon } from "@/components/social-network-icon";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
 type Selections = Record<string, CandidateSummary | null>;
@@ -231,15 +232,14 @@ function CandidatePicker({
 }
 
 function ProfileDrawer({ candidate, onClose }: { candidate: Candidate; onClose: () => void }) {
-  const assetsTotal = candidate.assets.reduce((sum, asset) => sum + asset.value, 0);
   const age = candidate.birthDate
     ? new Date(2026, 9, 4).getFullYear() - new Date(candidate.birthDate).getFullYear()
     : null;
-
-  function SocialIcon({ platform }: { platform: string }) {
-    if (platform === "TikTok") return <Music2 size={17} />;
-    return <Globe2 size={17} />;
-  }
+  const socials = normalizeSocialLinks(candidate.socials);
+  const tseHref = candidate.tseUrl
+    || (candidate.sqCandidate
+      ? tseCandidateUrl(candidate.uf === "BRASIL" ? "BR" : candidate.uf, candidate.sqCandidate)
+      : null);
 
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
@@ -268,41 +268,23 @@ function ProfileDrawer({ candidate, onClose }: { candidate: Candidate; onClose: 
           </div>
         </section>
 
-        {candidate.socials.length > 0 && (
+        {socials.length > 0 && (
           <section className="profile-section">
             <h3>Redes e site</h3>
             <p className="source-note">Links declarados à Justiça Eleitoral.</p>
             <div className="social-links">
-              {candidate.socials.map((social) => (
+              {socials.map((social) => (
                 <a href={social.url} target="_blank" rel="noopener noreferrer" key={social.url}>
-                  <SocialIcon platform={social.platform} /> {social.platform} <ExternalLink size={13} />
+                  <SocialNetworkIcon platform={social.platform} /> {social.label} <ExternalLink size={13} />
                 </a>
               ))}
             </div>
           </section>
         )}
 
-        {candidate.assets.length > 0 && (
-          <section className="profile-section">
-            <h3>Bens declarados</h3>
-            <div className="asset-total">
-              <span>Total declarado</span>
-              <strong>{assetsTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong>
-            </div>
-            <ul className="asset-list">
-              {candidate.assets.map((asset, index) => (
-                <li key={`${asset.type}-${index}`}>
-                  <span>{asset.description}</span>
-                  <strong>{asset.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {candidate.tseUrl && (
-          <a className="tse-link" href={candidate.tseUrl} target="_blank" rel="noopener noreferrer">
-            Ver candidatura no site do TSE <ExternalLink size={15} />
+        {tseHref && (
+          <a className="tse-link" href={tseHref} target="_blank" rel="noopener noreferrer">
+            Ver candidato no site do TSE <ExternalLink size={15} />
           </a>
         )}
       </aside>

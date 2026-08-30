@@ -1,7 +1,8 @@
 import { getSql, hasDatabase } from "./db";
 import { TERESINHA } from "./offices";
+import { normalizeSocialLinks } from "./social-links";
 import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
-import type { Candidate, CandidateSummary, DeclaredAsset, SocialLink } from "./types";
+import type { Candidate, CandidateSummary, SocialLink } from "./types";
 
 type CandidateRow = {
   id: string;
@@ -29,7 +30,7 @@ function cleanStoredValue(value: string | null) {
   return clean && !["#NULO#", "#NE", "-1"].includes(clean) ? clean : null;
 }
 
-function mapRow(row: CandidateRow, socials: SocialLink[] = [], assets: DeclaredAsset[] = []): Candidate {
+function mapRow(row: CandidateRow, socials: SocialLink[] = []): Candidate {
   return {
     id: String(row.id),
     sqCandidate: row.sq_candidate,
@@ -47,8 +48,8 @@ function mapRow(row: CandidateRow, socials: SocialLink[] = [], assets: DeclaredA
     education: cleanStoredValue(row.education),
     photoUrl: cleanStoredValue(row.photo_url),
     tseUrl: cleanStoredValue(row.tse_url),
-    socials,
-    assets,
+    socials: normalizeSocialLinks(socials),
+    assets: [],
     source: row.source,
     sourceUpdatedAt: row.source_updated_at,
   };
@@ -56,21 +57,13 @@ function mapRow(row: CandidateRow, socials: SocialLink[] = [], assets: DeclaredA
 
 async function loadRelated(candidateId: string) {
   const sql = getSql();
-  const [socialRowsRaw, assetRowsRaw] = await Promise.all([
-    sql.query(
-      `SELECT platform, url, handle FROM candidate_social_links
-        WHERE candidate_id = $1 ORDER BY platform, id`,
-      [candidateId],
-    ),
-    sql.query(
-      `SELECT asset_type AS type, description, value::float8 AS value
-         FROM declared_assets WHERE candidate_id = $1 ORDER BY value DESC`,
-      [candidateId],
-    ),
-  ]);
+  const socialRowsRaw = await sql.query(
+    `SELECT platform, url, handle FROM candidate_social_links
+      WHERE candidate_id = $1 ORDER BY platform, id`,
+    [candidateId],
+  );
   return {
     socials: socialRowsRaw as unknown as SocialLink[],
-    assets: assetRowsRaw as unknown as DeclaredAsset[],
   };
 }
 
@@ -86,7 +79,7 @@ function overlayTeresinha(fromDb: Candidate): Candidate {
     education: fromDb.education ?? TERESINHA.education,
     birthDate: fromDb.birthDate ?? TERESINHA.birthDate,
     socials: fromDb.socials,
-    assets: fromDb.assets,
+    assets: [],
     sourceUpdatedAt: fromDb.sourceUpdatedAt,
   };
 }
@@ -110,7 +103,7 @@ async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate
   const row = rows[0];
   if (!row) return null;
   const related = await loadRelated(row.id);
-  return mapRow(row, related.socials, related.assets);
+  return mapRow(row, related.socials);
 }
 
 export async function searchCandidates(input: {
@@ -169,8 +162,8 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   if (!row) return null;
   if (row.sq_candidate === TERESINHA_SQ_CANDIDATE) {
     const related = await loadRelated(row.id);
-    return overlayTeresinha(mapRow(row, related.socials, related.assets));
+    return overlayTeresinha(mapRow(row, related.socials));
   }
   const related = await loadRelated(row.id);
-  return mapRow(row, related.socials, related.assets);
+  return mapRow(row, related.socials);
 }

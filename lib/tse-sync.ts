@@ -2,6 +2,7 @@ import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
 import { syncCandidatePhotosToBlob } from "./candidate-photo-blob";
 import { getSql } from "./db";
+import { normalizeSocialLink } from "./social-links";
 import {
   TSE_CANDIDATE_PHOTO_BASE,
   TSE_ELECTION_ID_2026,
@@ -177,25 +178,21 @@ function csvSourceTimestamp(row: CsvRow) {
   return new Date(`${date}T${time}-03:00`).toISOString();
 }
 
-function platformFromUrl(url: string) {
-  const host = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ""; } })();
-  if (host.includes("instagram")) return "Instagram";
-  if (host.includes("facebook") || host === "fb.com") return "Facebook";
-  if (host.includes("tiktok")) return "TikTok";
-  if (host.includes("youtube")) return "YouTube";
-  if (host.includes("twitter") || host.includes("x.com")) return "X";
-  return "Site";
-}
-
 function safeUrl(value?: string) {
-  const clean = nullable(value);
-  if (!clean) return null;
-  try {
-    const url = new URL(clean.startsWith("http") ? clean : `https://${clean}`);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
+  return normalizeSocialLink(value)?.url
+    ?? (() => {
+      const clean = nullable(value);
+      if (!clean) return null;
+      try {
+        const withoutProtocols = clean.replace(/^(https?:\/\/)+/i, "");
+        const url = new URL(`https://${withoutProtocols}`);
+        if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+        url.protocol = "https:";
+        return url.toString();
+      } catch {
+        return null;
+      }
+    })();
 }
 
 function safeTseUrl(value?: string) {
@@ -392,8 +389,8 @@ async function syncDivulgaCand() {
       const sqCandidate = String(row.id ?? row.sqCandidato ?? "").trim();
       if (!sqCandidate || !Array.isArray(row.sites)) return [];
       return row.sites.flatMap((site) => {
-        const url = safeUrl(typeof site === "string" ? site : site.url);
-        return url ? [{ sq_candidate: sqCandidate, platform: platformFromUrl(url), url }] : [];
+        const parsed = normalizeSocialLink(typeof site === "string" ? site : site.url);
+        return parsed ? [{ sq_candidate: sqCandidate, platform: parsed.platform, url: parsed.url }] : [];
       });
     });
     if (rows.some((row) => Array.isArray(row.sites))) {
@@ -492,9 +489,9 @@ function latestCsvTimestamp(rows: CsvRow[]) {
 async function upsertSocials(rows: CsvRow[]) {
   const sql = getSql();
   const socialRows = rows.flatMap((row) => {
-    const url = safeUrl(row.DS_URL);
-    return url && row.SQ_CANDIDATO
-      ? [{ sq_candidate: row.SQ_CANDIDATO, platform: platformFromUrl(url), url }]
+    const parsed = normalizeSocialLink(row.DS_URL);
+    return parsed && row.SQ_CANDIDATO
+      ? [{ sq_candidate: row.SQ_CANDIDATO, platform: parsed.platform, url: parsed.url }]
       : [];
   });
   const normalized = [...new Map(
