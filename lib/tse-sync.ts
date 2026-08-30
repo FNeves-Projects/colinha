@@ -1,5 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
+import { syncCandidatePhotosToBlob } from "./candidate-photo-blob";
 import { getSql } from "./db";
 import {
   TSE_CANDIDATE_PHOTO_BASE,
@@ -260,7 +261,10 @@ async function backfillCandidatePhotoUrls() {
           photo_url IS NULL
           OR photo_url = ''
           OR photo_url LIKE '/assets/%'
-          OR photo_url NOT LIKE $1 || '/%'
+          OR (
+            photo_url NOT LIKE $1 || '/%'
+            AND photo_url NOT LIKE '%public.blob.vercel-storage.com/%'
+          )
         )
       RETURNING id::text`,
     [TSE_CANDIDATE_PHOTO_BASE],
@@ -549,6 +553,13 @@ export async function syncTse() {
       mirrorCommit?: string;
       mirrorSkipped?: boolean;
       photoBackfillCount?: number;
+      photoBlobEnabled?: boolean;
+      photoBlobLimit?: number;
+      photoBlobScannedCount?: number;
+      photoBlobUploadedCount?: number;
+      photoBlobSkippedCount?: number;
+      photoBlobFailedCount?: number;
+      photoBlobErrors?: string[];
       snapshotUpdatedAt?: string;
     };
     try {
@@ -621,7 +632,22 @@ export async function syncTse() {
       }
     }
     const photoBackfillCount = await backfillCandidatePhotoUrls();
-    details = { ...details, photoBackfillCount };
+    const photoBlobDetails = await syncCandidatePhotosToBlob().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        photoBlobEnabled: Boolean(
+          process.env.BLOB_READ_WRITE_TOKEN
+          || (process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID),
+        ),
+        photoBlobLimit: Number(process.env.CANDIDATE_PHOTO_SYNC_LIMIT ?? 200),
+        photoBlobScannedCount: 0,
+        photoBlobUploadedCount: 0,
+        photoBlobSkippedCount: 0,
+        photoBlobFailedCount: 0,
+        photoBlobErrors: [message.slice(0, 240)],
+      };
+    });
+    details = { ...details, photoBackfillCount, ...photoBlobDetails };
     await sql.query(
       `UPDATE sync_runs SET status = 'success', finished_at = now(), details = $2::jsonb WHERE id = $1`,
       [runId, JSON.stringify(details)],

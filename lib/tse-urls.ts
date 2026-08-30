@@ -10,3 +10,7 @@ export function tseCandidateUrl(uf: string, sqCandidate: string) {
 export function tseCandidatePhotoUrl(sqCandidate: string) {
   return `${TSE_CANDIDATE_PHOTO_BASE}/${sqCandidate}/70750`;
 }
+
+export function tseCandidatePhotoDownloadUrl(sqCandidate: string, uf: string) {
+  return `${TSE_CANDIDATE_PHOTO_BASE}/${sqCandidate}/${uf}`;
+}

@@ -24,6 +24,13 @@ npm run dev
   DivulgaCand, and a pinned mirror snapshot of the original TSE CSV files.
 - The contingency snapshot is pinned to an auditable commit. It never replaces a
   newer TSE candidate photo already stored in Neon.
+- Candidate photos are first normalized to the TSE image endpoint and can then
+  be copied to Vercel Blob. When `BLOB_READ_WRITE_TOKEN` is configured, each sync
+  uploads a limited batch of photos to public Blob storage and updates
+  `candidates.photo_url` with the Blob URL.
+- `CANDIDATE_PHOTO_SYNC_LIMIT` controls the maximum number of photo uploads per
+  sync run. The default is `200`; set it higher for a one-time backfill or `0` to
+  disable Blob photo syncing while keeping candidate data sync enabled.
 - Social links are shown as declared to the Brazilian Electoral Justice system.
 - If TSE changes the file URLs, configure the `TSE_*_URL` variables in Vercel.
 
@@ -32,6 +39,16 @@ npm run dev
 `vercel.json` schedules a daily sync, which is compatible with the Hobby plan.
 For commercial or campaign production use, choose a plan that fits Vercel's terms
 and increase the cron frequency if needed.
+
+To store candidate photos in Vercel Blob:
+
+1. Create a public Vercel Blob store in the same team as this project.
+2. Connect the Blob store to the `colinha-digital` project.
+3. Confirm that Vercel added `BLOB_READ_WRITE_TOKEN` to the project environment.
+4. Run `/api/sync/tse` manually or wait for the scheduled/post-deploy sync.
+
+The database stores only the resulting public Blob URL; image files are not saved
+inside Postgres.
 
 ## Post-Deploy Sync
 
