@@ -1,6 +1,7 @@
 import dns from "node:dns";
 import "./load-env";
 import { syncCandidatePhotosToBlob } from "../lib/candidate-photo-blob";
+import { discoverLocalPhotoZipPaths } from "../lib/tse-photo-archive";
 
 dns.setDefaultResultOrder("ipv4first");
 
@@ -12,11 +13,24 @@ function parseLimitArg() {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : undefined;
 }
 
+function parseZipFileArgs() {
+  const paths: string[] = [];
+  for (let index = 0; index < process.argv.length; index += 1) {
+    const arg = process.argv[index];
+    if (arg.startsWith("--zip-file=")) {
+      paths.push(arg.slice("--zip-file=".length));
+      continue;
+    }
+    if (arg === "--zip-file") {
+      const next = process.argv[index + 1];
+      if (next && !next.startsWith("--")) paths.push(next);
+    }
+  }
+  return paths;
+}
+
 function log(message: string) {
   console.log(message);
-  if (process.stdout.isTTY === false) {
-    process.stdout.write("");
-  }
 }
 
 async function main() {
@@ -27,12 +41,20 @@ async function main() {
     throw new Error("BLOB_READ_WRITE_TOKEN is not configured.");
   }
 
-  const useZip = process.argv.includes("--zip");
-  log(useZip ? "Photo ZIP archives enabled." : "Downloading photos one by one (Ctrl+C to stop).");
+  const localZipPaths = discoverLocalPhotoZipPaths(parseZipFileArgs());
+  if (!localZipPaths.length) {
+    log("No local photo ZIP files found.");
+    log("Download in your browser and save under data/tse-photos/:");
+    log("  https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_SP.zip");
+    log("  https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_BR.zip");
+    log("Or pass: npm run sync:photos -- --zip-file /path/to/foto_cand2026_SP.zip");
+    process.exitCode = 1;
+    return;
+  }
 
   const result = await syncCandidatePhotosToBlob({
     allowTseDownload: true,
-    skipZip: !useZip,
+    localZipPaths,
     limit: parseLimitArg(),
     onProgress: log,
   });
@@ -44,6 +66,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Photo sync failed", error);
+  console.error("Photo sync failed", error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });

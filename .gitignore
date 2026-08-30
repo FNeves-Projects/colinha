@@ -5,4 +5,5 @@ node_modules
 .vercel
 *.log
 .DS_Store
+data/tse-photos/*.zip
 tsconfig.tsbuildinfo

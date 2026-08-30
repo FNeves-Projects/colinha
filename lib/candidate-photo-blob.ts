@@ -1,12 +1,13 @@
 import { put } from "@vercel/blob";
 import { getSql } from "./db";
-import { loadTsePhotoArchive } from "./tse-photo-archive";
-import { fetchTse, TSE_PHOTO_FETCH_TIMEOUT_MS } from "./tse-fetch";
+import {
+  discoverLocalPhotoZipPaths,
+  loadTsePhotoArchiveFromLocalFiles,
+  LOCAL_PHOTO_ZIP_INSTRUCTIONS,
+} from "./tse-photo-archive";
 import {
   TSE_CANDIDATE_PHOTO_BASE,
   TSE_ELECTION_ID_2026,
-  tseCandidatePhotoDownloadUrl,
-  tseCandidatePhotoUrl,
 } from "./tse-urls";
 
 type CandidatePhotoRow = {
@@ -27,15 +28,15 @@ export type CandidatePhotoBlobSyncResult = {
   photoBlobArchiveZipCount: number;
   photoBlobArchivePhotoCount: number;
   photoBlobArchiveErrors: string[];
+  photoBlobLocalZipPaths: string[];
   photoBlobErrors: string[];
   photoBlobSkippedOnVercel: boolean;
   photoBlobHint?: string;
 };
 
 export type CandidatePhotoBlobSyncOptions = {
-  /** Local machines can reach TSE; Vercel datacenter IPs get HTTP 403. */
   allowTseDownload?: boolean;
-  skipZip?: boolean;
+  localZipPaths?: string[];
   limit?: number;
   concurrency?: number;
   onProgress?: (message: string) => void;
@@ -44,10 +45,10 @@ export type CandidatePhotoBlobSyncOptions = {
 const DEFAULT_PHOTO_SYNC_LIMIT = 200;
 const DEFAULT_LOCAL_PHOTO_SYNC_LIMIT = 20_000;
 const PHOTO_UPLOAD_CACHE_SECONDS = 31_536_000;
-const DEFAULT_FETCH_CONCURRENCY = 6;
+const DEFAULT_FETCH_CONCURRENCY = 8;
 const PUBLIC_BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
 const LOCAL_SYNC_HINT =
-  "TSE/Akamai blocks Vercel IPs with HTTP 403. Run `npm run sync:photos` from a local machine that can open the photo URL.";
+  "Download TSE photo ZIPs in your browser, save them under data/tse-photos/, then run npm run sync:photos.";
 
 function hasBlobCredentials() {
   return Boolean(
@@ -76,20 +77,6 @@ function isPublicBlobUrl(value: string | null) {
   } catch {
     return false;
   }
-}
-
-function isHttpUrl(value: string | null) {
-  if (!value) return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function uniqueUrls(urls: Array<string | null>) {
-  return [...new Set(urls.filter((url): url is string => Boolean(url)))];
 }
 
 function extensionForContentType(contentType: string) {
@@ -139,60 +126,10 @@ async function uploadPhotoBytes(row: CandidatePhotoRow, bytes: ArrayBuffer | Uin
   return blob.url;
 }
 
-async function fetchCandidatePhotoFromUrls(row: CandidatePhotoRow) {
-  const uf = row.uf === "BRASIL" ? "BR" : row.uf;
-  const urls = uniqueUrls([
-    tseCandidatePhotoDownloadUrl(row.sq_candidate, uf),
-    isHttpUrl(row.photo_url) && !isPublicBlobUrl(row.photo_url) ? row.photo_url : null,
-    tseCandidatePhotoUrl(row.sq_candidate),
-  ]);
-
-  const errors: string[] = [];
-  for (const url of urls) {
-    try {
-      const response = await fetchTse(url, TSE_PHOTO_FETCH_TIMEOUT_MS);
-
-      const contentType = response.headers.get("content-type")?.split(";")[0]?.toLowerCase() ?? "";
-      if (!response.ok) {
-        errors.push(`${response.status} ${url}`);
-        continue;
-      }
-      if (!contentType.startsWith("image/")) {
-        errors.push(`non-image ${contentType || "unknown"} ${url}`);
-        continue;
-      }
-
-      return {
-        bytes: await response.arrayBuffer(),
-        contentType,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${message.slice(0, 120)} ${url}`);
-    }
-  }
-
-  throw new Error(errors.join("; ") || `Unable to fetch photo for ${row.sq_candidate}`);
-}
-
-async function uploadCandidatePhoto(
-  row: CandidatePhotoRow,
-  archive: Map<string, { bytes: Uint8Array; contentType: string }>,
-) {
-  const archived = archive.get(row.sq_candidate);
-  if (archived) {
-    return uploadPhotoBytes(row, archived.bytes, archived.contentType);
-  }
-
-  const fetched = await fetchCandidatePhotoFromUrls(row);
-  return uploadPhotoBytes(row, fetched.bytes, fetched.contentType);
-}
-
 export async function syncCandidatePhotosToBlob(
   options: CandidatePhotoBlobSyncOptions = {},
 ): Promise<CandidatePhotoBlobSyncResult> {
   const allowTseDownload = options.allowTseDownload ?? !isRunningOnVercel();
-  const skipZip = options.skipZip ?? true;
   const fallbackLimit = allowTseDownload ? DEFAULT_LOCAL_PHOTO_SYNC_LIMIT : DEFAULT_PHOTO_SYNC_LIMIT;
   const limit = options.limit ?? parsePhotoSyncLimit(fallbackLimit);
   const concurrency = options.concurrency ?? DEFAULT_FETCH_CONCURRENCY;
@@ -208,6 +145,7 @@ export async function syncCandidatePhotosToBlob(
     photoBlobArchiveZipCount: 0,
     photoBlobArchivePhotoCount: 0,
     photoBlobArchiveErrors: [],
+    photoBlobLocalZipPaths: [],
     photoBlobErrors: [],
     photoBlobSkippedOnVercel: !allowTseDownload,
   };
@@ -249,36 +187,55 @@ export async function syncCandidatePhotosToBlob(
   result.photoBlobSkippedCount = rows.length - pendingRows.length;
   log(`Pending photos: ${pendingRows.length}`);
 
-  let archive = new Map<string, { bytes: Uint8Array; contentType: string }>();
-  if (skipZip) {
-    log("Skipping TSE photo ZIPs; downloading individual photos.");
-  } else {
-    const archiveLoad = await loadTsePhotoArchive(
-      pendingRows.map((row) => row.sq_candidate),
-      pendingRows.map((row) => row.uf),
-    );
-    result.photoBlobArchiveZipCount = archiveLoad.loadedZipCount;
-    result.photoBlobArchivePhotoCount = archiveLoad.loadedPhotoCount;
-    result.photoBlobArchiveErrors = archiveLoad.errors.slice(0, 4);
-    log(`Photo ZIP archives loaded: ${archiveLoad.loadedZipCount} (${archiveLoad.loadedPhotoCount} photos)`);
-    archive = archiveLoad.archive;
+  const localZipPaths = discoverLocalPhotoZipPaths(options.localZipPaths ?? []);
+  result.photoBlobLocalZipPaths = localZipPaths;
+
+  if (!localZipPaths.length) {
+    result.photoBlobHint = LOCAL_PHOTO_ZIP_INSTRUCTIONS;
+    throw new Error(LOCAL_PHOTO_ZIP_INSTRUCTIONS);
   }
 
-  log(`Starting downloads (${concurrency} at a time)...`);
+  log(`Loading local photo ZIPs:\n${localZipPaths.map((filePath) => `  - ${filePath}`).join("\n")}`);
+  const archiveLoad = await loadTsePhotoArchiveFromLocalFiles(
+    localZipPaths,
+    pendingRows.map((row) => row.sq_candidate),
+  );
+  result.photoBlobArchiveZipCount = archiveLoad.loadedZipCount;
+  result.photoBlobArchivePhotoCount = archiveLoad.loadedPhotoCount;
+  result.photoBlobArchiveErrors = archiveLoad.errors.slice(0, 4);
+  log(`Photos extracted from ZIPs: ${archiveLoad.loadedPhotoCount}/${pendingRows.length}`);
+
+  if (archiveLoad.loadedPhotoCount === 0) {
+    result.photoBlobHint = LOCAL_PHOTO_ZIP_INSTRUCTIONS;
+    throw new Error(
+      `No photos found in local ZIP files. ${archiveLoad.errors.join("; ") || LOCAL_PHOTO_ZIP_INSTRUCTIONS}`,
+    );
+  }
+
+  log(`Uploading to Blob (${concurrency} at a time)...`);
 
   await mapPool(pendingRows, concurrency, async (row, index) => {
     const position = index + 1;
-    if (position <= 5) {
-      log(`fetch ${position}/${pendingRows.length} ${row.sq_candidate}`);
+    const archived = archiveLoad.archive.get(row.sq_candidate);
+    if (!archived) {
+      result.photoBlobFailedCount += 1;
+      if (result.photoBlobErrors.length < 8) {
+        result.photoBlobErrors.push(`${row.sq_candidate}: not found in local photo ZIPs`);
+      }
+      if (result.photoBlobFailedCount <= 8 || position % 25 === 0) {
+        log(`missing ${position}/${pendingRows.length} ${row.sq_candidate}`);
+      }
+      return;
     }
+
     try {
-      const blobUrl = await uploadCandidatePhoto(row, archive);
+      const blobUrl = await uploadPhotoBytes(row, archived.bytes, archived.contentType);
       await sql.query(
         `UPDATE candidates SET photo_url = $2, updated_at = now() WHERE id = $1`,
         [row.id, blobUrl],
       );
       result.photoBlobUploadedCount += 1;
-      if (position <= 5 || position % 10 === 0 || position === pendingRows.length) {
+      if (position <= 5 || position % 25 === 0 || position === pendingRows.length) {
         log(`ok ${position}/${pendingRows.length} ${row.sq_candidate}`);
       }
     } catch (error) {

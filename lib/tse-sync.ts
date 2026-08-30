@@ -580,6 +580,7 @@ export async function syncTse() {
       photoBlobArchiveZipCount?: number;
       photoBlobArchivePhotoCount?: number;
       photoBlobArchiveErrors?: string[];
+      photoBlobLocalZipPaths?: string[];
       photoBlobErrors?: string[];
       photoBlobSkippedOnVercel?: boolean;
       photoBlobHint?: string;

@@ -50,8 +50,8 @@ To store candidate photos in Vercel Blob:
 1. Create a public Vercel Blob store in the same team as this project.
 2. Connect the Blob store to the `colinha-digital` project.
 3. Confirm that Vercel added `BLOB_READ_WRITE_TOKEN` to the project environment.
-4. Copy that token into `.env.local` together with `DATABASE_URL`.
-5. From your computer (not Vercel), run:
+4. Download the SP/BR photo ZIPs in your browser (links above) into `data/tse-photos/`.
+5. From your computer, run:
 
 ```bash
 npm run sync:photos
