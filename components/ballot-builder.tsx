@@ -10,7 +10,11 @@ import {
   ExternalLink,
   Info,
   LockKeyhole,
+  Moon,
+  Save,
   Search,
+  Share,
+  Sun,
   Volume2,
   VolumeX,
   X,
@@ -39,6 +43,8 @@ import { SocialNetworkIcon } from "@/components/social-network-icon";
 import { useTicketSlates } from "@/hooks/use-ticket-mates";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
+const PREVIEW_THEME_KEY = "colinha-preview-theme-v1";
+const BALLOT_META_LABEL = "Eleições 2026 - São Paulo - SP";
 const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
 
 function initialSelections(): Selections {
@@ -212,26 +218,79 @@ function BallotPreviewRow({ office, selection }: { office: Office; selection: Of
   );
 }
 
-function OfficeCardSlate({
-  headOfficeCode,
-  members,
+function fanCardStyle(rank: number, total: number): React.CSSProperties {
+  return {
+    ["--fan-i" as string]: rank - (total - 1) / 2,
+    ["--fan-r" as string]: rank,
+    zIndex: total - rank,
+  };
+}
+
+function OfficeCardFace({
+  office,
+  candidate,
+  headingLabel,
+  ballotNumber,
+  fixed,
+  onInspect,
+  onSwap,
+  interactive = true,
 }: {
-  headOfficeCode: number;
-  members: CandidateSummary[];
+  office: Office;
+  candidate: CandidateSummary;
+  headingLabel: string;
+  ballotNumber: string;
+  fixed?: boolean;
+  onInspect?: (candidate: CandidateSummary) => void;
+  onSwap?: () => void;
+  interactive?: boolean;
 }) {
-  if (!members.length) return null;
+  const body = (
+    <>
+      <CandidatePhoto candidate={candidate} />
+      <div className="office-card-copy">
+        <div className="office-card-heading">
+          <span>{headingLabel}</span>
+          {fixed && (
+            <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>
+          )}
+        </div>
+        <strong>{candidate.ballotName}</strong>
+        <small>{[candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}</small>
+      </div>
+    </>
+  );
 
   return (
-    <div className="office-card-slate" aria-hidden="true">
-      {members.map((member, index) => (
-        <div className="office-card-slate-layer" key={member.id} style={{ ["--slate-layer" as string]: index + 1 }}>
-          <div className="office-card-slate-block">
-            <CandidatePhoto candidate={member} size={48} />
-            <span className="office-card-slate-label">{slateMateRoleLabel(headOfficeCode, member.officeCode)}</span>
-          </div>
+    <>
+      {interactive && onInspect ? (
+        <button
+          type="button"
+          className="office-card-body"
+          onClick={() => onInspect(candidate)}
+          aria-label={`Ver informações de ${candidate.ballotName}`}
+        >
+          {body}
+        </button>
+      ) : (
+        <div className="office-card-body office-card-body-static" aria-hidden={!interactive ? true : undefined}>
+          {body}
         </div>
-      ))}
-    </div>
+      )}
+      <div className={`selected-number${!fixed && onSwap ? " has-swap-action" : ""}`}>
+        {!fixed && onSwap && (
+          <button
+            className="swap-button swap-button-rail"
+            type="button"
+            onClick={(event) => { event.stopPropagation(); onSwap(); }}
+            aria-label={`Trocar ${office.label}`}
+          >
+            <ArrowLeftRight size={16} strokeWidth={2.2} />
+          </button>
+        )}
+        <NumberBoxes number={ballotNumber} digits={office.digits} />
+      </div>
+    </>
   );
 }
 
@@ -336,7 +395,7 @@ function BallotShareSheet({
     <div className="ballot-share-capture" aria-hidden="true">
       <div className="ballot-share-frame">
         <div className="ballot-share-sheet">
-          <p className="ballot-share-meta">São Paulo · SP</p>
+          <p className="ballot-share-meta">{BALLOT_META_LABEL}</p>
           <div className="ballot-share-rows">
             {OFFICES.map((office) => (
               <BallotShareRow
@@ -356,6 +415,14 @@ function BallotShareSheet({
         </div>
       </div>
     </div>
+  );
+}
+
+function WhatsAppIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.881 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
   );
 }
 
@@ -384,8 +451,8 @@ function SpecialVoteCard({
             : "Digite um número inexistente na urna. Anula o voto naquele cargo."}
         </small>
       </div>
-      <div className="selected-number">
-        <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
+      <div className="selected-number has-swap-action">
+        <button className="swap-button swap-button-rail" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
           <ArrowLeftRight size={16} strokeWidth={2.2} />
         </button>
         {vote === "branco" ? (
@@ -414,36 +481,89 @@ function SelectedOfficeCard({
   isActive?: boolean;
 }) {
   const members = slate ?? [];
+  const totalCards = members.length + 1;
+  const roster = useMemo(
+    () => [
+      { person: candidate, label: office.label },
+      ...members.map((member) => ({
+        person: member,
+        label: slateMateRoleLabel(candidate.officeCode, member.officeCode),
+      })),
+    ],
+    [candidate, members, office.label],
+  );
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [candidate.id, members.map((member) => member.id).join(",")]);
+
+  const cardClass = (extra = "") =>
+    `office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${extra}`;
+
+  function focusPerson(index: number) {
+    setActiveIndex(index);
+    onInspect?.(roster[index].person);
+  }
+
+  if (!members.length) {
+    return (
+      <article className={cardClass()}>
+        <OfficeCardFace
+          office={office}
+          candidate={candidate}
+          headingLabel={office.label}
+          ballotNumber={candidate.ballotNumber}
+          fixed={office.fixed}
+          onInspect={onInspect}
+          onSwap={office.fixed ? undefined : onSwap}
+        />
+      </article>
+    );
+  }
+
+  const orderedIndices = [
+    activeIndex,
+    ...roster.map((_, index) => index).filter((index) => index !== activeIndex),
+  ];
+
   return (
-    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${members.length ? " has-slate" : ""}${onSwap ? " has-swap" : ""}`}>
-      <OfficeCardSlate headOfficeCode={candidate.officeCode} members={members} />
-      <button
-        type="button"
-        className="office-card-body"
-        onClick={() => onInspect?.(candidate)}
-        aria-label={`Ver informações de ${candidate.ballotName}`}
-      >
-        <CandidatePhoto candidate={candidate} />
-        <div className="office-card-copy">
-          <div className="office-card-heading">
-            <span>{office.label}</span>
-            {office.fixed && (
-              <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>
+    <div className={`office-card-fan office-card-fan--deck${isActive ? " is-picking" : ""}`}>
+      {orderedIndices.map((personIndex, rank) => {
+        const entry = roster[personIndex];
+        const isFront = rank === 0;
+
+        return (
+          <article
+            key={entry.person.id}
+            className={`${cardClass(" office-card-fan__card")}${isFront && onSwap ? " has-swap" : ""}${!isFront ? " office-card-fan__mate" : ""}`}
+            data-rank={rank}
+            style={fanCardStyle(rank, totalCards)}
+          >
+            <OfficeCardFace
+              office={office}
+              candidate={entry.person}
+              headingLabel={entry.label}
+              ballotNumber={candidate.ballotNumber}
+              fixed={office.fixed}
+              onInspect={isFront ? onInspect : undefined}
+              onSwap={isFront && !office.fixed ? onSwap : undefined}
+            />
+            {!isFront && (
+              <button
+                type="button"
+                className="office-card-fan__pick"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  focusPerson(personIndex);
+                }}
+                aria-label={`Ver ${entry.label} de ${candidate.ballotName}`}
+              />
             )}
-          </div>
-          <strong>{candidate.ballotName}</strong>
-          <small>{[candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}</small>
-        </div>
-      </button>
-      <div className="selected-number">
-        {!office.fixed && onSwap && (
-          <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
-            <ArrowLeftRight size={16} strokeWidth={2.2} />
-          </button>
-        )}
-        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
-      </div>
-    </article>
+          </article>
+        );
+      })}
+    </div>
   );
 }
 
@@ -517,7 +637,7 @@ function CandidatePicker({
   );
 }
 
-function ProfileDrawer({ candidate, onClose }: { candidate: Candidate; onClose: () => void }) {
+function ProfileContent({ candidate }: { candidate: Candidate }) {
   const age = candidate.birthDate
     ? new Date(2026, 9, 4).getFullYear() - new Date(candidate.birthDate).getFullYear()
     : null;
@@ -528,53 +648,90 @@ function ProfileDrawer({ candidate, onClose }: { candidate: Candidate; onClose: 
       : null);
 
   return (
-    <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
-      <aside className="profile-drawer" role="dialog" aria-modal="true" aria-label={`Informações de ${candidate.ballotName}`} onMouseDown={(event) => event.stopPropagation()}>
-        <button className="drawer-close" type="button" onClick={onClose} aria-label="Fechar informações">
-          <X size={21} />
-        </button>
-        <div className="profile-kicker">{candidate.officeName} · {candidate.uf} · Eleição 2026</div>
-        <div className="profile-head">
-          <CandidatePhoto candidate={candidate} size={92} />
-          <div>
-            <h2>{candidate.ballotName}</h2>
-            <p>{candidate.fullName}{age ? ` · ${age} anos` : ""}</p>
-            <span className="party-pill">{candidate.partyAcronym ?? "Partido não informado"}</span>
-          </div>
+    <>
+      <div className="profile-kicker">{candidate.officeName} · {candidate.uf} · Eleição 2026</div>
+      <div className="profile-head">
+        <CandidatePhoto candidate={candidate} size={92} />
+        <div>
+          <h2>{candidate.ballotName}</h2>
+          <p>{candidate.fullName}{age ? ` · ${age} anos` : ""}</p>
+          <span className="party-pill">{candidate.partyAcronym ?? "Partido não informado"}</span>
         </div>
-        <div className="profile-number"><NumberBoxes number={candidate.ballotNumber} digits={candidate.ballotNumber.length} /></div>
+      </div>
+      <div className="profile-number"><NumberBoxes number={candidate.ballotNumber} digits={candidate.ballotNumber.length} /></div>
 
+      <section className="profile-section">
+        <h3>Candidatura</h3>
+        <div className="facts-grid">
+          <div><span>Situação</span><strong>{candidate.status ?? "Não informada"}</strong></div>
+          <div><span>Ocupação</span><strong>{candidate.occupation ?? "Não informada"}</strong></div>
+          <div><span>Escolaridade</span><strong>{candidate.education ?? "Não informada"}</strong></div>
+          <div><span>Fonte</span><strong>{candidate.source}</strong></div>
+        </div>
+      </section>
+
+      {socials.length > 0 && (
         <section className="profile-section">
-          <h3>Candidatura</h3>
-          <div className="facts-grid">
-            <div><span>Situação</span><strong>{candidate.status ?? "Não informada"}</strong></div>
-            <div><span>Ocupação</span><strong>{candidate.occupation ?? "Não informada"}</strong></div>
-            <div><span>Escolaridade</span><strong>{candidate.education ?? "Não informada"}</strong></div>
-            <div><span>Fonte</span><strong>{candidate.source}</strong></div>
+          <h3>Redes e site</h3>
+          <p className="source-note">Links declarados à Justiça Eleitoral.</p>
+          <div className="social-links">
+            {socials.map((social) => (
+              <a href={social.url} target="_blank" rel="noopener noreferrer" key={social.url}>
+                <SocialNetworkIcon platform={social.platform} /> {social.label} <ExternalLink size={13} />
+              </a>
+            ))}
           </div>
         </section>
+      )}
 
-        {socials.length > 0 && (
-          <section className="profile-section">
-            <h3>Redes e site</h3>
-            <p className="source-note">Links declarados à Justiça Eleitoral.</p>
-            <div className="social-links">
-              {socials.map((social) => (
-                <a href={social.url} target="_blank" rel="noopener noreferrer" key={social.url}>
-                  <SocialNetworkIcon platform={social.platform} /> {social.label} <ExternalLink size={13} />
-                </a>
-              ))}
-            </div>
-          </section>
-        )}
+      {tseHref && (
+        <a className="tse-link" href={tseHref} target="_blank" rel="noopener noreferrer">
+          Ver candidato no site do TSE <ExternalLink size={15} />
+        </a>
+      )}
+    </>
+  );
+}
 
-        {tseHref && (
-          <a className="tse-link" href={tseHref} target="_blank" rel="noopener noreferrer">
-            Ver candidato no site do TSE <ExternalLink size={15} />
-          </a>
-        )}
-      </aside>
-    </div>
+function CandidateProfile({
+  candidate,
+  presentation,
+  onClose,
+}: {
+  candidate: Candidate;
+  presentation: "inline" | "modal";
+  onClose: () => void;
+}) {
+  if (presentation === "modal") {
+    return (
+      <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
+        <aside
+          className="profile-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Informações de ${candidate.ballotName}`}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <button className="drawer-close" type="button" onClick={onClose} aria-label="Fechar informações">
+            <X size={21} />
+          </button>
+          <ProfileContent candidate={candidate} />
+        </aside>
+      </div>
+    );
+  }
+
+  return (
+    <section
+      className="profile-panel profile-panel-inline"
+      role="region"
+      aria-label={`Informações de ${candidate.ballotName}`}
+    >
+      <button className="profile-panel-close" type="button" onClick={onClose} aria-label="Fechar informações">
+        <X size={20} />
+      </button>
+      <ProfileContent candidate={candidate} />
+    </section>
   );
 }
 
@@ -584,6 +741,7 @@ export function BallotBuilder() {
   const [muted, setMuted] = useState(false);
   const [profile, setProfile] = useState<Candidate | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [previewTheme, setPreviewTheme] = useState<"light" | "dark">("light");
   const [working, setWorking] = useState<"save" | "share" | "whatsapp" | null>(null);
   const [notice, setNotice] = useState("");
   const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
@@ -606,6 +764,7 @@ export function BallotBuilder() {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as {
         selections?: Selections;
         muted?: boolean;
+        previewTheme?: "light" | "dark";
       };
       if (saved.selections) {
         setSelections(sanitizeSelections({
@@ -614,6 +773,12 @@ export function BallotBuilder() {
         }));
       }
       setMuted(Boolean(saved.muted));
+      const storedTheme = localStorage.getItem(PREVIEW_THEME_KEY);
+      if (storedTheme === "light" || storedTheme === "dark") {
+        setPreviewTheme(storedTheme);
+      } else if (saved.previewTheme === "light" || saved.previewTheme === "dark") {
+        setPreviewTheme(saved.previewTheme);
+      }
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -689,7 +854,8 @@ export function BallotBuilder() {
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ selections, muted }));
-  }, [hydrated, muted, selections]);
+    localStorage.setItem(PREVIEW_THEME_KEY, previewTheme);
+  }, [hydrated, muted, previewTheme, selections]);
 
   const duplicateSenator = useMemo(() => {
     const first = selections.senador1;
@@ -730,6 +896,7 @@ export function BallotBuilder() {
   }
 
   function openPicker(officeId: string) {
+    setProfile(null);
     setPickerOfficeId(officeId);
   }
 
@@ -756,8 +923,19 @@ export function BallotBuilder() {
   const pickerOffice = OFFICES.find((office) => office.id === pickerOfficeId) ?? null;
   const showInlinePicker = Boolean(pickerOffice && !mobilePicker);
   const showModalPicker = Boolean(pickerOffice && mobilePicker);
+  const showInlineProfile = Boolean(profile && !mobilePicker && !showInlinePicker);
+
+  useEffect(() => {
+    if (!profile || !mobilePicker) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [profile, mobilePicker]);
 
   async function inspectCandidate(candidate: CandidateSummary) {
+    if (!mobilePicker) setPickerOfficeId(null);
     setProfileLoading(true);
     try {
       const lookupId = candidate.id === TERESINHA.id || candidate.sqCandidate === TERESINHA.sqCandidate
@@ -941,11 +1119,11 @@ export function BallotBuilder() {
               <span><strong>Atenção:</strong> os dois votos para senador precisam ser diferentes. Se repetir o número, o segundo voto será anulado.</span>
             </div>
           )}
-          {profileLoading && <p className="loading-profile">Carregando informações do candidato…</p>}
+          {profileLoading && mobilePicker && <p className="loading-profile">Carregando informações do candidato…</p>}
           <p className="notice builder-notice" aria-live="polite">{notice}</p>
         </section>
 
-        <aside className={`preview-panel${showInlinePicker ? " is-picking" : ""}`}>
+        <aside className={`preview-panel${showInlinePicker ? " is-picking" : ""}${showInlineProfile ? " is-profile" : ""}`}>
           {showInlinePicker && pickerOffice ? (
             <CandidatePickerPanel
               office={pickerOffice}
@@ -956,43 +1134,93 @@ export function BallotBuilder() {
               onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
               onClearCurrent={() => clearOffice(pickerOffice.id)}
             />
+          ) : showInlineProfile && profile ? (
+            <CandidateProfile
+              candidate={profile}
+              presentation="inline"
+              onClose={() => setProfile(null)}
+            />
+          ) : profileLoading && !mobilePicker ? (
+            <p className="profile-panel-loading">Carregando informações do candidato…</p>
           ) : (
             <>
               <div className="section-heading preview-heading">
                 <div><span className="step">02</span><h2>Sua colinha</h2></div>
                 <p>Atualiza conforme você escolhe.</p>
               </div>
-              <div className="ballot-frame">
-                <div className="ballot-paper ballot-sheet" ref={ballotRef} id="ballot-card">
-                  <p className="ballot-sheet-meta">São Paulo · SP</p>
-                  <div className="ballot-sheet-rows">
-                    {OFFICES.map((office) => (
-                      <BallotPreviewRow
-                        key={office.id}
-                        office={office}
-                        selection={selections[office.id]}
-                      />
-                    ))}
+              <div className={`ballot-frame${previewTheme === "dark" ? " ballot-frame--dark" : ""}`}>
+                {previewTheme === "dark" ? (
+                  <div className="ballot-paper ballot-share-sheet ballot-preview-dark">
+                    <p className="ballot-share-meta">{BALLOT_META_LABEL}</p>
+                    <div className="ballot-share-rows">
+                      {OFFICES.map((office) => (
+                        <BallotShareRow
+                          key={office.id}
+                          office={office}
+                          selection={selections[office.id]}
+                          slate={ticketSlates[office.id]}
+                        />
+                      ))}
+                    </div>
+                    {duplicateSenator && (
+                      <p className="ballot-share-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
+                    )}
+                    <p className="ballot-share-footer">
+                      Monte a sua em <strong>colinha.2026</strong>
+                    </p>
                   </div>
-                  {duplicateSenator && (
-                    <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
-                  )}
-                  <p className="ballot-sheet-footer">
-                    Monte a sua em <strong>colinha.2026</strong>
-                  </p>
-                </div>
+                ) : (
+                  <div className="ballot-paper ballot-sheet" ref={ballotRef} id="ballot-card">
+                    <p className="ballot-sheet-meta">{BALLOT_META_LABEL}</p>
+                    <div className="ballot-sheet-rows">
+                      {OFFICES.map((office) => (
+                        <BallotPreviewRow
+                          key={office.id}
+                          office={office}
+                          selection={selections[office.id]}
+                        />
+                      ))}
+                    </div>
+                    {duplicateSenator && (
+                      <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
+                    )}
+                    <p className="ballot-sheet-footer">
+                      Monte a sua em <strong>colinha.2026</strong>
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="preview-options" role="group" aria-label="Opções da colinha">
+                <button
+                  type="button"
+                  className={`preview-option-btn${previewTheme === "dark" ? " is-active" : ""}`}
+                  aria-pressed={previewTheme === "dark"}
+                  onClick={() => setPreviewTheme((theme) => (theme === "light" ? "dark" : "light"))}
+                  aria-label={previewTheme === "light" ? "Tema escuro da imagem" : "Tema claro da imagem"}
+                >
+                  {previewTheme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+                  <span>{previewTheme === "light" ? "Tema escuro" : "Tema claro"}</span>
+                </button>
               </div>
 
               <div className="action-buttons">
                 <button className="save-button" type="button" onClick={saveBallot} disabled={working !== null}>
-                  {working === "save" ? <span className="button-spinner" /> : <Check size={19} />}
+                  {working === "save" ? <span className="button-spinner" /> : <Save size={18} strokeWidth={2.2} />}
                   Salvar colinha
                 </button>
                 <button className="share-button" type="button" onClick={shareBallot} disabled={working !== null}>
-                  {working === "share" ? <span className="button-spinner" /> : "Compartilhar"}
+                  {working === "share" ? <span className="button-spinner" /> : <Share size={18} strokeWidth={2.2} />}
+                  Compartilhar
                 </button>
-                <button className="whatsapp-button" type="button" onClick={shareBallotOnWhatsApp} disabled={working !== null}>
-                  {working === "whatsapp" ? <span className="button-spinner" /> : "WhatsApp"}
+                <button
+                  className="whatsapp-link"
+                  type="button"
+                  onClick={shareBallotOnWhatsApp}
+                  disabled={working !== null}
+                  aria-label="Compartilhar no WhatsApp"
+                >
+                  {working === "whatsapp" ? <span className="button-spinner" /> : <WhatsAppIcon size={22} />}
                 </button>
               </div>
               <button
@@ -1014,7 +1242,13 @@ export function BallotBuilder() {
         <p>Ferramenta de campanha. Antes de votar, confirme a situação e os dados oficiais da candidatura no TSE.</p>
       </footer>
 
-      {profile && <ProfileDrawer candidate={profile} onClose={() => setProfile(null)} />}
+      {profile && mobilePicker && (
+        <CandidateProfile
+          candidate={profile}
+          presentation="modal"
+          onClose={() => setProfile(null)}
+        />
+      )}
 
       <div ref={shareRef}>
         <BallotShareSheet

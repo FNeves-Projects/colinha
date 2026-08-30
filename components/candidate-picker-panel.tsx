@@ -237,7 +237,7 @@ export function CandidatePickerPanel({
             value={party}
             onChange={(event) => setParty(event.target.value)}
           >
-            <option value="">Todos os partidos</option>
+            <option value="">Partidos</option>
             {parties.map((acronym) => (
               <option key={acronym} value={acronym}>{acronym}</option>
             ))}
