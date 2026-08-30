@@ -10,7 +10,9 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "sync:tse": "tsx scripts/sync-tse.ts",
     "sync:photos": "tsx scripts/sync-photos.ts",
-    "photos": "npm run sync:photos"
+    "photos": "npm run sync:photos",
+    "repair:socials": "tsx scripts/repair-social-links.ts",
+    "repair:photos": "tsx scripts/repair-photo-urls.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",

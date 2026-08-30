@@ -104,6 +104,67 @@ function NumberBoxes({ number, digits }: { number?: string; digits: number }) {
   );
 }
 
+function SelectedOfficeCard({
+  office,
+  candidate,
+  mode = "interactive",
+  onInspect,
+  onClear,
+}: {
+  office: Office;
+  candidate: CandidateSummary;
+  mode?: "interactive" | "preview";
+  onInspect?: (candidate: CandidateSummary) => void;
+  onClear?: () => void;
+}) {
+  return (
+    <article className={`office-card selected${office.fixed ? " fixed" : ""}${mode === "preview" ? " preview-card" : ""}`}>
+      <CandidatePhoto candidate={candidate} />
+      <div className="office-card-copy">
+        <div className="office-card-heading">
+          <span>{office.label}</span>
+          {office.fixed && mode === "interactive" && (
+            <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>
+          )}
+        </div>
+        <strong>{candidate.ballotName}</strong>
+        <small>{[candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}</small>
+        {mode === "interactive" && onInspect && (
+          <button className="text-button" type="button" onClick={() => onInspect(candidate)}>
+            <Info size={14} /> Ver informações
+          </button>
+        )}
+      </div>
+      <div className="selected-number">
+        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
+        {mode === "interactive" && !office.fixed && onClear && (
+          <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
+            Trocar
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function EmptyOfficeCard({ office }: { office: Office }) {
+  return (
+    <article className="office-card preview-empty">
+      <span className="empty-photo" aria-hidden="true" />
+      <div className="office-card-copy">
+        <div className="office-card-heading">
+          <span>{office.label}</span>
+        </div>
+        <strong>Escolha seu candidato</strong>
+        <small>{office.digits} dígitos</small>
+      </div>
+      <div className="selected-number">
+        <NumberBoxes digits={office.digits} />
+      </div>
+    </article>
+  );
+}
+
 function CandidatePicker({
   office,
   selected,
@@ -163,28 +224,12 @@ function CandidatePicker({
 
   if (selected) {
     return (
-      <article className={`office-card selected${office.fixed ? " fixed" : ""}`}>
-        <CandidatePhoto candidate={selected} />
-        <div className="office-card-copy">
-          <div className="office-card-heading">
-            <span>{office.label}</span>
-            {office.fixed && <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>}
-          </div>
-          <strong>{selected.ballotName}</strong>
-          <small>{[selected.partyAcronym, selected.status].filter(Boolean).join(" · ")}</small>
-          <button className="text-button" type="button" onClick={() => onInspect(selected)}>
-            <Info size={14} /> Ver informações
-          </button>
-        </div>
-        <div className="selected-number">
-          <NumberBoxes number={selected.ballotNumber} digits={office.digits} />
-          {!office.fixed && (
-            <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
-              Trocar
-            </button>
-          )}
-        </div>
-      </article>
+      <SelectedOfficeCard
+        office={office}
+        candidate={selected}
+        onInspect={onInspect}
+        onClear={onClear}
+      />
     );
   }
 
@@ -570,22 +615,18 @@ export function BallotBuilder() {
                 <div>ORDEM DE VOTAÇÃO<br /><strong>SÃO PAULO</strong></div>
               </div>
               <p className="paper-instruction">Confira o número e a foto antes de apertar <strong>CONFIRMA</strong>.</p>
-              <div className="paper-offices">
-                {OFFICES.map((office, index) => {
+              <div className="office-list ballot-office-list">
+                {OFFICES.map((office) => {
                   const candidate = selections[office.id];
-                  return (
-                    <div className={`paper-office${candidate ? " chosen" : ""}`} key={office.id}>
-                      <span className="paper-order">{String(index + 1).padStart(2, "0")}</span>
-                      <div className="paper-person">
-                        {candidate ? <CandidatePhoto candidate={candidate} size={50} /> : <span className="paper-photo-empty" />}
-                        <div>
-                          <span>{office.label}</span>
-                          <strong>{candidate?.ballotName ?? "Escolha seu candidato"}</strong>
-                          <small>{candidate?.partyAcronym ?? `${office.digits} dígitos`}</small>
-                        </div>
-                      </div>
-                      <NumberBoxes number={candidate?.ballotNumber} digits={office.digits} />
-                    </div>
+                  return candidate ? (
+                    <SelectedOfficeCard
+                      key={office.id}
+                      office={office}
+                      candidate={candidate}
+                      mode="preview"
+                    />
+                  ) : (
+                    <EmptyOfficeCard key={office.id} office={office} />
                   );
                 })}
               </div>

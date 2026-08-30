@@ -1,12 +1,11 @@
 import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
-import { syncCandidatePhotos } from "./candidate-photo-sync";
+import { CANDIDATE_PHOTO_PUBLIC_PATH, candidatePhotoPublicUrl, syncCandidatePhotos } from "./candidate-photo-sync";
 import { getSql } from "./db";
 import { normalizeSocialLink } from "./social-links";
 import {
   TSE_CANDIDATE_PHOTO_BASE,
   TSE_ELECTION_ID_2026,
-  tseCandidatePhotoUrl,
   tseCandidateUrl,
 } from "./tse-urls";
 
@@ -252,7 +251,7 @@ async function backfillCandidatePhotoUrls() {
   const sql = getSql();
   const rows = await sql.query(
     `UPDATE candidates
-        SET photo_url = $1 || '/' || sq_candidate || '/70750',
+        SET photo_url = $1 || '/' || sq_candidate || '.jpg',
             updated_at = now()
       WHERE election_year = 2026
         AND uf IN ('SP', 'BR')
@@ -262,14 +261,12 @@ async function backfillCandidatePhotoUrls() {
           photo_url IS NULL
           OR photo_url = ''
           OR photo_url LIKE '/assets/%'
-          OR (
-            photo_url NOT LIKE $1 || '/%'
-            AND photo_url NOT LIKE '/candidate-photos/%'
-            AND photo_url NOT LIKE '%public.blob.vercel-storage.com/%'
-          )
+          OR photo_url LIKE $2 || '/%'
+          OR photo_url LIKE '%public.blob.vercel-storage.com/%'
+          OR photo_url NOT LIKE $1 || '/%'
         )
       RETURNING id::text`,
-    [TSE_CANDIDATE_PHOTO_BASE],
+    [CANDIDATE_PHOTO_PUBLIC_PATH, TSE_CANDIDATE_PHOTO_BASE],
   ) as Array<{ id: string }>;
   return rows.length;
 }
@@ -297,7 +294,7 @@ async function upsertCandidates(rows: CsvRow[]) {
       gender: nullable(row.DS_GENERO),
       race: nullable(row.DS_COR_RACA),
       marital_status: nullable(row.DS_ESTADO_CIVIL),
-      photo_url: tseCandidatePhotoUrl(row.SQ_CANDIDATO),
+      photo_url: candidatePhotoPublicUrl(row.SQ_CANDIDATO),
       tse_url: tseCandidateUrl(row.SG_UF === "BRASIL" ? "BR" : row.SG_UF, row.SQ_CANDIDATO),
       source_updated_at: csvSourceTimestamp(row),
     }))
@@ -382,7 +379,7 @@ async function syncDivulgaCand() {
         gender: row.descricaoSexo?.trim() || null,
         race: row.descricaoCorRaca?.trim() || null,
         marital_status: row.descricaoEstadoCivil?.trim() || null,
-        photo_url: safeTseUrl(row.fotoUrl) ?? tseCandidatePhotoUrl(id),
+        photo_url: candidatePhotoPublicUrl(id),
         tse_url: tseCandidateUrl(target.uf, id),
         source_updated_at: now,
       }];
