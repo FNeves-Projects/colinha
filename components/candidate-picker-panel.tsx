@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Filter, Search, X } from "lucide-react";
 import { nullBallotNumber, selectionPickerLabel, selectionRemoveLabel, type OfficeSelection, type SpecialVoteKind } from "@/lib/ballot-selections";
 import type { Office } from "@/lib/offices";
@@ -103,6 +103,7 @@ export function CandidatePickerPanel({
   onClearCurrent?: () => void;
 }) {
   const partyFilterId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [party, setParty] = useState("");
   const [parties, setParties] = useState<string[]>([]);
@@ -179,6 +180,11 @@ export function CandidatePickerPanel({
   const currentLabel = selectionPickerLabel(currentSelection);
   const currentCandidate = currentSelection?.type === "candidate" ? currentSelection.candidate : null;
 
+  function handleClearCurrent() {
+    onClearCurrent?.();
+    window.requestAnimationFrame(() => searchRef.current?.focus());
+  }
+
   const panel = (
     <section
       className={`picker-panel picker-panel-${presentation}`}
@@ -212,7 +218,7 @@ export function CandidatePickerPanel({
               )}
             </div>
           </div>
-          <button type="button" className="btn-glass btn-glass--sm btn-glass--ghost btn-glass--danger btn-glass--block picker-clear-current" onClick={onClearCurrent}>
+          <button type="button" className="btn-glass btn-glass--sm btn-glass--ghost btn-glass--danger btn-glass--block picker-clear-current" onClick={handleClearCurrent}>
             {selectionRemoveLabel(currentSelection)}
           </button>
         </div>
@@ -222,6 +228,7 @@ export function CandidatePickerPanel({
         <div className="search-field picker-search">
           <Search size={17} />
           <input
+            ref={searchRef}
             value={query}
             inputMode="search"
             autoComplete="off"

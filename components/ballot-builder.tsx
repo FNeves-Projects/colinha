@@ -1006,14 +1006,14 @@ export function BallotBuilder() {
     const office = OFFICES.find((item) => item.id === officeId);
     if (!office || office.fixed) return;
     setSelections((current) => ({ ...current, [officeId]: null }));
-    setPickerOfficeId(null);
-    setNotice("Escolha removida da colinha.");
+    setPickerOfficeId(officeId);
+    setNotice("Escolha removida. Busque outro candidato.");
   }
 
   function clearBallot() {
     setSelections(initialSelections());
     setPickerOfficeId(null);
-    setNotice("Colinha esvaziada. Deputada Federal mantida.");
+    setNotice("Colinha limpa. Deputada Federal mantida.");
   }
 
   const hasClearableSelections = useMemo(
@@ -1440,9 +1440,9 @@ export function BallotBuilder() {
                 type="button"
                 onClick={clearBallot}
                 disabled={!hasClearableSelections}
-                aria-label="Esvaziar colinha e remover candidatos escolhidos"
+                aria-label="Limpar colinha e remover candidatos escolhidos"
               >
-                Esvaziar colinha
+                Limpar colinha
               </button>
               <p className="privacy-note">
                 <LockKeyhole size={14} aria-hidden="true" />
