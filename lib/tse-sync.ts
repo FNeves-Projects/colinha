@@ -1,7 +1,12 @@
 import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
 import { getSql } from "./db";
-import { TSE_ELECTION_ID_2026, tseCandidatePhotoUrl, tseCandidateUrl } from "./tse-urls";
+import {
+  TSE_CANDIDATE_PHOTO_BASE,
+  TSE_ELECTION_ID_2026,
+  tseCandidatePhotoUrl,
+  tseCandidateUrl,
+} from "./tse-urls";
 
 type CsvRow = Record<string, string>;
 
@@ -239,6 +244,28 @@ async function persistCandidates(normalized: NormalizedCandidate[]) {
       [JSON.stringify(batch)],
     );
   }
+}
+
+async function backfillCandidatePhotoUrls() {
+  const sql = getSql();
+  const rows = await sql.query(
+    `UPDATE candidates
+        SET photo_url = $1 || '/' || sq_candidate || '/70750',
+            updated_at = now()
+      WHERE election_year = 2026
+        AND uf IN ('SP', 'BR')
+        AND source = 'TSE'
+        AND sq_candidate ~ '^[0-9]+$'
+        AND (
+          photo_url IS NULL
+          OR photo_url = ''
+          OR photo_url LIKE '/assets/%'
+          OR photo_url NOT LIKE $1 || '/%'
+        )
+      RETURNING id::text`,
+    [TSE_CANDIDATE_PHOTO_BASE],
+  ) as Array<{ id: string }>;
+  return rows.length;
 }
 
 async function upsertCandidates(rows: CsvRow[]) {
@@ -521,6 +548,7 @@ export async function syncTse() {
       secondaryError?: string;
       mirrorCommit?: string;
       mirrorSkipped?: boolean;
+      photoBackfillCount?: number;
       snapshotUpdatedAt?: string;
     };
     try {
@@ -592,6 +620,8 @@ export async function syncTse() {
         }
       }
     }
+    const photoBackfillCount = await backfillCandidatePhotoUrls();
+    details = { ...details, photoBackfillCount };
     await sql.query(
       `UPDATE sync_runs SET status = 'success', finished_at = now(), details = $2::jsonb WHERE id = $1`,
       [runId, JSON.stringify(details)],
