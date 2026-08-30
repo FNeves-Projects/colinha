@@ -69,6 +69,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-family: var(--font-display), sans-serif;
   font-size: 21px;
   letter-spacing: -0.04em;
+  cursor: default;
+  user-select: none;
 }
 .brand > span:last-child > span { color: var(--yellow); }
 .paper-brand > span:last-child, .footer-brand span { color: var(--green-dark); }
@@ -132,6 +134,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .builder-panel { padding: 27px; }
 .preview-panel { position: sticky; top: 18px; padding: 27px; }
+.preview-panel.is-picking { padding: 0; overflow: hidden; }
+.builder-notice { justify-content: flex-start; margin-top: 16px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .section-heading > div { display: flex; align-items: center; gap: 10px; }
 .section-heading h2 { margin: 0; font-size: 22px; letter-spacing: -.035em; }
@@ -161,6 +165,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   transition: border-color .2s, box-shadow .2s, transform .2s;
 }
 .office-card.selected { border-color: #bed0f6; background: #f9fbff; }
+.office-card.is-picking {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(23, 55, 127, 0.12);
+}
 .office-card.fixed { border-color: #94afe8; background: linear-gradient(135deg, #edf3ff, #f9fbff); }
 .candidate-photo, .empty-photo {
   flex: 0 0 auto;
@@ -484,6 +492,38 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .empty-slot .office-card-copy > strong { display: block; font-size: 15px; }
 .empty-slot .office-card-copy > small { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
 
+.picker-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.picker-panel-inline {
+  min-height: 560px;
+  max-height: calc(100vh - 48px);
+}
+.picker-panel-modal {
+  width: min(500px, 100%);
+  height: 100%;
+  overflow: hidden;
+  background: white;
+  color: var(--ink);
+  box-shadow: -20px 0 50px rgba(0,0,0,.18);
+  animation: drawer-in .25s ease-out;
+}
+.picker-panel-inline .picker-drawer-head {
+  padding: 22px 22px 14px;
+}
+.picker-panel-inline .picker-toolbar {
+  padding: 14px 22px;
+}
+.picker-panel-inline .picker-results {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+.picker-panel-inline .picker-vote-options {
+  padding: 14px 22px 22px;
+}
 .picker-drawer {
   position: relative;
   display: flex;

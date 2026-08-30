@@ -30,7 +30,7 @@ import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
-import { CandidatePickerDrawer } from "@/components/candidate-picker-drawer";
+import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
@@ -196,13 +196,15 @@ function SpecialVoteCard({
   office,
   vote,
   onSwap,
+  isActive,
 }: {
   office: Office;
   vote: SpecialVoteKind;
   onSwap: () => void;
+  isActive?: boolean;
 }) {
   return (
-    <article className={`office-card selected special-vote special-vote-${vote}`}>
+    <article className={`office-card selected special-vote special-vote-${vote}${isActive ? " is-picking" : ""}`}>
       <span className="empty-photo special-vote-photo" aria-hidden="true" />
       <div className="office-card-copy">
         <div className="office-card-heading">
@@ -234,14 +236,16 @@ function SelectedOfficeCard({
   candidate,
   onInspect,
   onSwap,
+  isActive,
 }: {
   office: Office;
   candidate: CandidateSummary;
   onInspect?: (candidate: CandidateSummary) => void;
   onSwap?: () => void;
+  isActive?: boolean;
 }) {
   return (
-    <article className={`office-card selected${office.fixed ? " fixed" : ""}`}>
+    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}`}>
       <CandidatePhoto candidate={candidate} />
       <div className="office-card-copy">
         <div className="office-card-heading">
@@ -270,9 +274,17 @@ function SelectedOfficeCard({
   );
 }
 
-function EmptyOfficeSlot({ office, onOpen }: { office: Office; onOpen: () => void }) {
+function EmptyOfficeSlot({
+  office,
+  onOpen,
+  isActive,
+}: {
+  office: Office;
+  onOpen: () => void;
+  isActive?: boolean;
+}) {
   return (
-    <article className="office-card empty-slot">
+    <article className={`office-card empty-slot${isActive ? " is-picking" : ""}`}>
       <button type="button" className="empty-slot-button" onClick={onOpen}>
         <span className="empty-photo" aria-hidden="true"><Search size={20} /></span>
         <span className="office-card-copy">
@@ -291,56 +303,41 @@ function EmptyOfficeSlot({ office, onOpen }: { office: Office; onOpen: () => voi
 function CandidatePicker({
   office,
   selected,
-  onSelect,
-  onSelectSpecial,
+  isActive,
+  onOpen,
   onInspect,
 }: {
   office: Office;
   selected: OfficeSelection;
-  onSelect: (candidate: CandidateSummary) => void;
-  onSelectSpecial: (vote: SpecialVoteKind) => void;
+  isActive: boolean;
+  onOpen: () => void;
   onInspect: (candidate: CandidateSummary) => void;
 }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  function handleSelect(candidate: CandidateSummary) {
-    onSelect(candidate);
-    setDrawerOpen(false);
+  if (selected?.type === "candidate") {
+    return (
+      <SelectedOfficeCard
+        office={office}
+        candidate={selected.candidate}
+        onInspect={onInspect}
+        onSwap={office.fixed ? undefined : onOpen}
+        isActive={isActive}
+      />
+    );
   }
 
-  function handleSelectSpecial(vote: SpecialVoteKind) {
-    onSelectSpecial(vote);
-    setDrawerOpen(false);
+  if (selected?.type === "special") {
+    return (
+      <SpecialVoteCard
+        office={office}
+        vote={selected.vote}
+        onSwap={onOpen}
+        isActive={isActive}
+      />
+    );
   }
 
   return (
-    <>
-      {selected?.type === "candidate" ? (
-        <SelectedOfficeCard
-          office={office}
-          candidate={selected.candidate}
-          onInspect={onInspect}
-          onSwap={office.fixed ? undefined : () => setDrawerOpen(true)}
-        />
-      ) : selected?.type === "special" ? (
-        <SpecialVoteCard
-          office={office}
-          vote={selected.vote}
-          onSwap={() => setDrawerOpen(true)}
-        />
-      ) : (
-        <EmptyOfficeSlot office={office} onOpen={() => setDrawerOpen(true)} />
-      )}
-
-      <CandidatePickerDrawer
-        office={office}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onSelect={handleSelect}
-        onSelectSpecial={handleSelectSpecial}
-        onInspect={onInspect}
-      />
-    </>
+    <EmptyOfficeSlot office={office} onOpen={onOpen} isActive={isActive} />
   );
 }
 
@@ -413,9 +410,19 @@ export function BallotBuilder() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [working, setWorking] = useState<"save" | "share" | "whatsapp" | null>(null);
   const [notice, setNotice] = useState("");
+  const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
+  const [mobilePicker, setMobilePicker] = useState(false);
   const ballotRef = useRef<HTMLDivElement>(null);
   const refreshedSavedSelections = useRef(false);
   const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 960px)");
+    const sync = () => setMobilePicker(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     try {
@@ -533,15 +540,25 @@ export function BallotBuilder() {
       ...current,
       [office.id]: { type: "candidate", candidate: cleanCandidate },
     }));
+    setPickerOfficeId(null);
     setNotice(`${candidate.ballotName} foi adicionado à sua colinha.`);
     playConfirmation();
   }
 
   function selectSpecialVote(office: Office, vote: SpecialVoteKind) {
     setSelections((current) => ({ ...current, [office.id]: { type: "special", vote } }));
+    setPickerOfficeId(null);
     setNotice(selectionNotice({ type: "special", vote }));
     playConfirmation();
   }
+
+  function openPicker(officeId: string) {
+    setPickerOfficeId(officeId);
+  }
+
+  const pickerOffice = OFFICES.find((office) => office.id === pickerOfficeId) ?? null;
+  const showInlinePicker = Boolean(pickerOffice && !mobilePicker);
+  const showModalPicker = Boolean(pickerOffice && mobilePicker);
 
   async function inspectCandidate(candidate: CandidateSummary) {
     setProfileLoading(true);
@@ -648,10 +665,10 @@ export function BallotBuilder() {
     <main>
       <header className="hero">
         <nav className="hero-nav">
-          <a className="brand" href="#top" aria-label="Colinha 2026">
+          <div className="brand" aria-label="Colinha 2026">
             <span className="brand-mark"><Check size={19} strokeWidth={3} /></span>
             <span>colinha<span>.2026</span></span>
-          </a>
+          </div>
           <button
             className="sound-toggle"
             type="button"
@@ -664,7 +681,7 @@ export function BallotBuilder() {
             {muted ? "Som desligado" : "Som ligado"}
           </button>
         </nav>
-        <div className="hero-content" id="top">
+        <div className="hero-content">
           <p className="eyebrow">Eleição 2026 · São Paulo</p>
           <h1>Sua escolha, na<br />ordem certa.</h1>
           <p className="hero-lead">
@@ -693,8 +710,8 @@ export function BallotBuilder() {
                 office={office}
                 key={office.id}
                 selected={selections[office.id]}
-                onSelect={(candidate) => selectCandidate(office, candidate)}
-                onSelectSpecial={(vote) => selectSpecialVote(office, vote)}
+                isActive={pickerOfficeId === office.id}
+                onOpen={() => openPicker(office.id)}
                 onInspect={inspectCandidate}
               />
             ))}
@@ -707,48 +724,61 @@ export function BallotBuilder() {
             </div>
           )}
           {profileLoading && <p className="loading-profile">Carregando informações do candidato…</p>}
+          <p className="notice builder-notice" aria-live="polite">{notice}</p>
         </section>
 
-        <aside className="preview-panel">
-          <div className="section-heading preview-heading">
-            <div><span className="step">02</span><h2>Sua colinha</h2></div>
-            <p>Atualiza conforme você escolhe.</p>
-          </div>
-          <div className="ballot-frame">
-            <div className="ballot-paper ballot-sheet" ref={ballotRef} id="ballot-card">
-              <p className="ballot-sheet-meta">São Paulo · SP</p>
-              <div className="ballot-sheet-rows">
-                {OFFICES.map((office) => (
-                  <BallotPreviewRow
-                    key={office.id}
-                    office={office}
-                    selection={selections[office.id]}
-                  />
-                ))}
+        <aside className={`preview-panel${showInlinePicker ? " is-picking" : ""}`}>
+          {showInlinePicker && pickerOffice ? (
+            <CandidatePickerPanel
+              office={pickerOffice}
+              presentation="inline"
+              onClose={() => setPickerOfficeId(null)}
+              onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
+              onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
+              onInspect={inspectCandidate}
+            />
+          ) : (
+            <>
+              <div className="section-heading preview-heading">
+                <div><span className="step">02</span><h2>Sua colinha</h2></div>
+                <p>Atualiza conforme você escolhe.</p>
               </div>
-              {duplicateSenator && (
-                <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
-              )}
-              <p className="ballot-sheet-footer">
-                Monte a sua em <strong>colinha.2026</strong>
-              </p>
-            </div>
-          </div>
+              <div className="ballot-frame">
+                <div className="ballot-paper ballot-sheet" ref={ballotRef} id="ballot-card">
+                  <p className="ballot-sheet-meta">São Paulo · SP</p>
+                  <div className="ballot-sheet-rows">
+                    {OFFICES.map((office) => (
+                      <BallotPreviewRow
+                        key={office.id}
+                        office={office}
+                        selection={selections[office.id]}
+                      />
+                    ))}
+                  </div>
+                  {duplicateSenator && (
+                    <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
+                  )}
+                  <p className="ballot-sheet-footer">
+                    Monte a sua em <strong>colinha.2026</strong>
+                  </p>
+                </div>
+              </div>
 
-          <div className="action-buttons">
-            <button className="save-button" type="button" onClick={saveBallot} disabled={working !== null}>
-              {working === "save" ? <span className="button-spinner" /> : <Check size={19} />}
-              Salvar colinha
-            </button>
-            <button className="share-button" type="button" onClick={shareBallot} disabled={working !== null}>
-              {working === "share" ? <span className="button-spinner" /> : "Compartilhar"}
-            </button>
-            <button className="whatsapp-button" type="button" onClick={shareBallotOnWhatsApp} disabled={working !== null}>
-              {working === "whatsapp" ? <span className="button-spinner" /> : "WhatsApp"}
-            </button>
-          </div>
-          <p className="privacy-note"><LockKeyhole size={14} /> Suas escolhas ficam somente neste aparelho.</p>
-          <p className="notice" aria-live="polite">{notice}</p>
+              <div className="action-buttons">
+                <button className="save-button" type="button" onClick={saveBallot} disabled={working !== null}>
+                  {working === "save" ? <span className="button-spinner" /> : <Check size={19} />}
+                  Salvar colinha
+                </button>
+                <button className="share-button" type="button" onClick={shareBallot} disabled={working !== null}>
+                  {working === "share" ? <span className="button-spinner" /> : "Compartilhar"}
+                </button>
+                <button className="whatsapp-button" type="button" onClick={shareBallotOnWhatsApp} disabled={working !== null}>
+                  {working === "whatsapp" ? <span className="button-spinner" /> : "WhatsApp"}
+                </button>
+              </div>
+              <p className="privacy-note"><LockKeyhole size={14} /> Suas escolhas ficam somente neste aparelho.</p>
+            </>
+          )}
         </aside>
       </div>
 
@@ -758,6 +788,16 @@ export function BallotBuilder() {
       </footer>
 
       {profile && <ProfileDrawer candidate={profile} onClose={() => setProfile(null)} />}
+      {showModalPicker && pickerOffice && (
+        <CandidatePickerPanel
+          office={pickerOffice}
+          presentation="modal"
+          onClose={() => setPickerOfficeId(null)}
+          onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
+          onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
+          onInspect={inspectCandidate}
+        />
+      )}
     </main>
   );
 }

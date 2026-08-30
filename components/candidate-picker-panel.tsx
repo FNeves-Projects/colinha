@@ -15,7 +15,7 @@ function candidateInitials(candidate: CandidateSummary) {
     .join("");
 }
 
-function DrawerPhoto({ candidate }: { candidate: CandidateSummary }) {
+function PickerPhoto({ candidate }: { candidate: CandidateSummary }) {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -45,7 +45,7 @@ function DrawerPhoto({ candidate }: { candidate: CandidateSummary }) {
   );
 }
 
-function DrawerNumberBoxes({ number, digits }: { number?: string; digits: number }) {
+function PickerNumberBoxes({ number, digits }: { number?: string; digits: number }) {
   const values = Array.from({ length: digits }, (_, index) => number?.[index] ?? "");
   return (
     <span className="number-boxes" aria-hidden="true">
@@ -69,7 +69,7 @@ function VoteOptionButtons({
     <div className="vote-options picker-vote-options">
       <button type="button" className="vote-option vote-option-null" onClick={() => onSelect("nulo")}>
         <span className="vote-option-label">Votar nulo</span>
-        <DrawerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+        <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
         <span className="vote-option-tip">
           Número que não existe. Anula o voto naquele cargo. Fonte: TSE.
         </span>
@@ -85,16 +85,16 @@ function VoteOptionButtons({
   );
 }
 
-export function CandidatePickerDrawer({
+export function CandidatePickerPanel({
   office,
-  open,
+  presentation,
   onClose,
   onSelect,
   onSelectSpecial,
   onInspect,
 }: {
   office: Office;
-  open: boolean;
+  presentation: "inline" | "modal";
   onClose: () => void;
   onSelect: (candidate: CandidateSummary) => void;
   onSelectSpecial: (vote: SpecialVoteKind) => void;
@@ -109,14 +109,6 @@ export function CandidatePickerDrawer({
   const [searched, setSearched] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setParty("");
-      setResults([]);
-      setSearched(false);
-      return;
-    }
-
     const controller = new AbortController();
     void fetch(
       `/api/candidates?parties=1&office=${office.code}&uf=${office.jurisdiction}&year=2026`,
@@ -127,11 +119,9 @@ export function CandidatePickerDrawer({
       .catch(() => setParties([]));
 
     return () => controller.abort();
-  }, [open, office]);
+  }, [office]);
 
   useEffect(() => {
-    if (!open) return;
-
     const trimmed = query.trim();
     if (trimmed.length > 0 && trimmed.length < 2) {
       setResults([]);
@@ -173,91 +163,106 @@ export function CandidatePickerDrawer({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, office, party, query]);
+  }, [office, party, query]);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (presentation !== "modal") return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [presentation]);
 
-  return (
-    <div className="drawer-backdrop picker-backdrop" role="presentation" onMouseDown={onClose}>
-      <aside
-        className="picker-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Buscar candidato: ${office.label}`}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="picker-drawer-head">
-          <div>
-            <p className="picker-kicker">Eleição 2026 · {office.jurisdiction === "BR" ? "Brasil" : "São Paulo"}</p>
-            <h2>{office.label}</h2>
-          </div>
-          <button className="picker-close" type="button" onClick={onClose} aria-label="Fechar">
-            <X size={20} />
-          </button>
+  const panel = (
+    <section
+      className={`picker-panel picker-panel-${presentation}`}
+      role={presentation === "modal" ? "dialog" : "region"}
+      aria-modal={presentation === "modal" ? true : undefined}
+      aria-label={`Buscar candidato: ${office.label}`}
+      onMouseDown={presentation === "modal" ? (event) => event.stopPropagation() : undefined}
+    >
+      <div className="picker-drawer-head">
+        <div>
+          <p className="picker-kicker">Eleição 2026 · {office.jurisdiction === "BR" ? "Brasil" : "São Paulo"}</p>
+          <h2>{office.label}</h2>
         </div>
+        <button className="picker-close" type="button" onClick={onClose} aria-label="Fechar">
+          <X size={20} />
+        </button>
+      </div>
 
-        <div className="picker-toolbar">
-          <div className="search-field picker-search">
-            <Search size={17} />
-            <input
-              value={query}
-              inputMode="search"
-              autoComplete="off"
-              placeholder="Busque candidato por nome ou número"
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            {loading && <span className="search-spinner" aria-label="Buscando" />}
-          </div>
-          <label className="picker-party-filter" htmlFor={partyFilterId}>
-            <Filter size={15} />
-            <select
-              id={partyFilterId}
-              value={party}
-              onChange={(event) => setParty(event.target.value)}
+      <div className="picker-toolbar">
+        <div className="search-field picker-search">
+          <Search size={17} />
+          <input
+            value={query}
+            inputMode="search"
+            autoComplete="off"
+            placeholder="Busque candidato por nome ou número"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {loading && <span className="search-spinner" aria-label="Buscando" />}
+        </div>
+        <label className="picker-party-filter" htmlFor={partyFilterId}>
+          <Filter size={15} />
+          <select
+            id={partyFilterId}
+            value={party}
+            onChange={(event) => setParty(event.target.value)}
+          >
+            <option value="">Todos os partidos</option>
+            {parties.map((acronym) => (
+              <option key={acronym} value={acronym}>{acronym}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="picker-results" role="listbox" aria-label={`Resultados para ${office.label}`}>
+        {results.map((candidate) => (
+          <div className="picker-result-row" key={candidate.id}>
+            <button
+              type="button"
+              className="picker-result-main"
+              onClick={() => onSelect(candidate)}
             >
-              <option value="">Todos os partidos</option>
-              {parties.map((acronym) => (
-                <option key={acronym} value={acronym}>{acronym}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+              <PickerPhoto candidate={candidate} />
+              <span>
+                <strong>{candidate.ballotName}</strong>
+                <small>{candidate.partyAcronym ?? "Partido não informado"}</small>
+              </span>
+              <b>{candidate.ballotNumber}</b>
+            </button>
+            <button
+              type="button"
+              className="picker-result-info"
+              aria-label={`Ver informações de ${candidate.ballotName}`}
+              onClick={() => onInspect(candidate)}
+            >
+              <Info size={16} />
+            </button>
+          </div>
+        ))}
+        {searched && !loading && results.length === 0 && (
+          <p className="picker-empty">Nenhum candidato encontrado nesse cargo.</p>
+        )}
+        {!searched && loading && (
+          <p className="picker-empty">Carregando candidatos…</p>
+        )}
+      </div>
 
-        <div className="picker-results" role="listbox" aria-label={`Resultados para ${office.label}`}>
-          {results.map((candidate) => (
-            <div className="picker-result-row" key={candidate.id}>
-              <button
-                type="button"
-                className="picker-result-main"
-                onClick={() => onSelect(candidate)}
-              >
-                <DrawerPhoto candidate={candidate} />
-                <span>
-                  <strong>{candidate.ballotName}</strong>
-                  <small>{candidate.partyAcronym ?? "Partido não informado"}</small>
-                </span>
-                <b>{candidate.ballotNumber}</b>
-              </button>
-              <button
-                type="button"
-                className="picker-result-info"
-                aria-label={`Ver informações de ${candidate.ballotName}`}
-                onClick={() => onInspect(candidate)}
-              >
-                <Info size={16} />
-              </button>
-            </div>
-          ))}
-          {searched && !loading && results.length === 0 && (
-            <p className="picker-empty">Nenhum candidato encontrado nesse cargo.</p>
-          )}
-          {!searched && loading && (
-            <p className="picker-empty">Carregando candidatos…</p>
-          )}
-        </div>
-
-        {!office.fixed && <VoteOptionButtons office={office} onSelect={onSelectSpecial} />}
-      </aside>
-    </div>
+      {!office.fixed && <VoteOptionButtons office={office} onSelect={onSelectSpecial} />}
+    </section>
   );
+
+  if (presentation === "modal") {
+    return (
+      <div className="drawer-backdrop picker-backdrop" role="presentation" onMouseDown={onClose}>
+        {panel}
+      </div>
+    );
+  }
+
+  return panel;
 }
