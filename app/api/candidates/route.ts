@@ -16,9 +16,11 @@ const searchSchema = officeScopeSchema.extend({
   party: z.string().trim().max(20).optional(),
 });
 
-const ticketMateSchema = officeScopeSchema.extend({
+const ticketMateSchema = z.object({
   headOffice: z.coerce.number().int().positive(),
   ballot: z.string().trim().min(1).max(10),
+  uf: z.string().trim().transform((value) => (value === "BRASIL" ? "BR" : value)).pipe(z.enum(["SP", "BR"])),
+  year: z.coerce.number().int().min(2026).max(2030).default(2026),
 });
 
 export async function GET(request: NextRequest) {

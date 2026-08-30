@@ -93,10 +93,12 @@ const MIRROR_ASSET_URLS = [
 ];
 const DIVULGA_TARGETS = [
   { uf: "SP", officeCode: 3, officeName: "Governador" },
+  { uf: "SP", officeCode: 4, officeName: "Vice-governador" },
   { uf: "SP", officeCode: 5, officeName: "Senador" },
   { uf: "SP", officeCode: 6, officeName: "Deputado Federal" },
   { uf: "SP", officeCode: 7, officeName: "Deputado Estadual" },
   { uf: "BR", officeCode: 1, officeName: "Presidente" },
+  { uf: "BR", officeCode: 2, officeName: "Vice-presidente" },
 ] as const;
 
 function isRelevantCsv(name: string) {

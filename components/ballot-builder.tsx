@@ -30,12 +30,13 @@ import {
 } from "@/lib/ballot-selections";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
 import { previewOfficeLabel } from "@/lib/party-styles";
-import { hasTicketMate, ticketMateRoleLabel } from "@/lib/ticket-mates";
+import { ticketMateRoleLabel } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
 import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
+import { useTicketMates } from "@/hooks/use-ticket-mates";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
 const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
@@ -141,12 +142,12 @@ function NumberBoxes({ number, digits }: { number?: string; digits: number }) {
   );
 }
 
-function PartyBadge({ acronym }: { acronym: string | null | undefined }) {
+function PartyBadge({ acronym, variant = "live" }: { acronym: string | null | undefined; variant?: "live" | "share" }) {
   if (!acronym) return null;
   const logoUrl = partyLogoUrl(acronym);
   const fallback = partyBadgeFallback(acronym);
   return (
-    <div className="party-badge">
+    <div className={`party-badge${variant === "share" ? " party-badge-share" : ""}`}>
       {logoUrl ? (
         <span className="party-badge-logo">
           <Image src={logoUrl} alt="" width={44} height={44} unoptimized />
@@ -161,81 +162,7 @@ function PartyBadge({ acronym }: { acronym: string | null | undefined }) {
   );
 }
 
-function BallotPreviewCandidateRow({
-  office,
-  candidate,
-  officeLabel,
-  onSwap,
-}: {
-  office: Office;
-  candidate: CandidateSummary;
-  officeLabel: string;
-  onSwap?: () => void;
-}) {
-  const [ticketMate, setTicketMate] = useState<CandidateSummary | null>(null);
-  const showsTicketMate = hasTicketMate(candidate.officeCode);
-
-  useEffect(() => {
-    if (!showsTicketMate) {
-      setTicketMate(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    const params = new URLSearchParams({
-      ticketMate: "1",
-      headOffice: String(candidate.officeCode),
-      ballot: candidate.ballotNumber,
-      uf: candidate.uf,
-      year: "2026",
-    });
-
-    void fetch(`/api/candidates?${params}`, { signal: controller.signal, cache: "no-store" })
-      .then((response) => response.json())
-      .then((data) => {
-        setTicketMate(data.ticketMate ? sanitizeCandidateSummary(data.ticketMate as CandidateSummary) : null);
-      })
-      .catch(() => setTicketMate(null));
-
-    return () => controller.abort();
-  }, [candidate.ballotNumber, candidate.officeCode, candidate.uf, showsTicketMate]);
-
-  return (
-    <div className={`ballot-row ballot-row-filled${ticketMate ? " has-ticket-mate" : ""}`}>
-      <div className="ballot-row-photo-stack">
-        {ticketMate && (
-          <div className="ballot-ticket-mate-wrap" aria-hidden="true">
-            <CandidatePhoto candidate={ticketMate} className="candidate-photo ballot-ticket-mate-photo" size={56} />
-          </div>
-        )}
-        <CandidatePhoto candidate={candidate} className="candidate-photo ballot-head-photo" size={68} />
-      </div>
-      <div className="ballot-row-main">
-        <span className="ballot-row-office">{officeLabel}</span>
-        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
-        <strong className="ballot-row-name">{candidate.ballotName}</strong>
-      </div>
-      <div className="ballot-row-side">
-        {onSwap && (
-          <button className="ballot-row-swap" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
-            <ArrowLeftRight size={15} strokeWidth={2.2} />
-          </button>
-        )}
-        <PartyBadge acronym={candidate.partyAcronym} />
-      </div>
-    </div>
-  );
-}
-
-function BallotPreviewRow({
-  office,
-  selection,
-  onSwap,
-}: {
-  office: Office;
-  selection: OfficeSelection;
-  onSwap?: () => void;
-}) {
+function BallotPreviewRow({ office, selection }: { office: Office; selection: OfficeSelection }) {
   const officeLabel = previewOfficeLabel(office.id, office.label);
 
   if (!selection) {
@@ -251,7 +178,7 @@ function BallotPreviewRow({
 
   if (selection.type === "special") {
     return (
-      <div className="ballot-row ballot-row-empty ballot-row-filled">
+      <div className="ballot-row ballot-row-empty">
         <div className="ballot-row-main">
           <span className="ballot-row-office">{officeLabel}</span>
           {selection.vote === "branco" ? (
@@ -263,22 +190,144 @@ function BallotPreviewRow({
             </>
           )}
         </div>
-        {onSwap && (
-          <button className="ballot-row-swap ballot-row-swap-special" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
-            <ArrowLeftRight size={15} strokeWidth={2.2} />
-          </button>
+      </div>
+    );
+  }
+
+  const candidate = selection.candidate;
+  return (
+    <div className="ballot-row">
+      <div className="ballot-row-photo">
+        <CandidatePhoto candidate={candidate} size={68} />
+      </div>
+      <div className="ballot-row-main">
+        <span className="ballot-row-office">{officeLabel}</span>
+        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
+        <strong className="ballot-row-name">{candidate.ballotName}</strong>
+      </div>
+      <div className="ballot-row-party">
+        <PartyBadge acronym={candidate.partyAcronym} variant="live" />
+      </div>
+    </div>
+  );
+}
+
+function BallotShareCandidateRow({
+  office,
+  candidate,
+  officeLabel,
+  ticketMate,
+}: {
+  office: Office;
+  candidate: CandidateSummary;
+  officeLabel: string;
+  ticketMate?: CandidateSummary | null;
+}) {
+  return (
+    <div className={`ballot-share-row${ticketMate ? " has-ticket-mate" : ""}`}>
+      <div className="ballot-share-photo-stack">
+        {ticketMate && (
+          <div className="ballot-share-ticket-mate-wrap" aria-hidden="true">
+            <CandidatePhoto candidate={ticketMate} className="candidate-photo ballot-share-ticket-mate-photo" size={56} />
+          </div>
         )}
+        <CandidatePhoto candidate={candidate} className="candidate-photo ballot-share-head-photo" size={68} />
+      </div>
+      <div className="ballot-share-main">
+        <span className="ballot-share-office">{officeLabel}</span>
+        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
+        <strong className="ballot-share-name">{candidate.ballotName}</strong>
+      </div>
+      <div className="ballot-share-side">
+        <PartyBadge acronym={candidate.partyAcronym} variant="share" />
+      </div>
+    </div>
+  );
+}
+
+function BallotShareRow({
+  office,
+  selection,
+  ticketMate,
+}: {
+  office: Office;
+  selection: OfficeSelection;
+  ticketMate?: CandidateSummary | null;
+}) {
+  const officeLabel = previewOfficeLabel(office.id, office.label);
+
+  if (!selection) {
+    return (
+      <div className="ballot-share-row ballot-share-row-empty">
+        <div className="ballot-share-main">
+          <span className="ballot-share-office">{officeLabel}</span>
+          <span className="ballot-share-pending">—</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (selection.type === "special") {
+    return (
+      <div className="ballot-share-row ballot-share-row-empty">
+        <div className="ballot-share-main">
+          <span className="ballot-share-office">{officeLabel}</span>
+          {selection.vote === "branco" ? (
+            <span className="ballot-blank-pill ballot-blank-pill-share">BRANCO</span>
+          ) : (
+            <>
+              <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+              <strong className="ballot-share-name ballot-share-special">NULO</strong>
+            </>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <BallotPreviewCandidateRow
+    <BallotShareCandidateRow
       office={office}
       candidate={selection.candidate}
       officeLabel={officeLabel}
-      onSwap={office.fixed ? undefined : onSwap}
+      ticketMate={ticketMate}
     />
+  );
+}
+
+function BallotShareSheet({
+  selections,
+  ticketMates,
+  duplicateSenator,
+}: {
+  selections: Selections;
+  ticketMates: Record<string, CandidateSummary | null>;
+  duplicateSenator: boolean;
+}) {
+  return (
+    <div className="ballot-share-capture" aria-hidden="true">
+      <div className="ballot-share-frame">
+        <div className="ballot-share-sheet">
+          <p className="ballot-share-meta">São Paulo · SP</p>
+          <div className="ballot-share-rows">
+            {OFFICES.map((office) => (
+              <BallotShareRow
+                key={office.id}
+                office={office}
+                selection={selections[office.id]}
+                ticketMate={ticketMates[office.id]}
+              />
+            ))}
+          </div>
+          {duplicateSenator && (
+            <p className="ballot-share-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
+          )}
+          <p className="ballot-share-footer">
+            Monte a sua em <strong>colinha.2026</strong>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -324,44 +373,18 @@ function SpecialVoteCard({
 function SelectedOfficeCard({
   office,
   candidate,
+  ticketMate,
   onInspect,
   onSwap,
   isActive,
 }: {
   office: Office;
   candidate: CandidateSummary;
+  ticketMate?: CandidateSummary | null;
   onInspect?: (candidate: CandidateSummary) => void;
   onSwap?: () => void;
   isActive?: boolean;
 }) {
-  const [ticketMate, setTicketMate] = useState<CandidateSummary | null>(null);
-  const showsTicketMate = hasTicketMate(candidate.officeCode);
-
-  useEffect(() => {
-    if (!showsTicketMate) {
-      setTicketMate(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    const params = new URLSearchParams({
-      ticketMate: "1",
-      headOffice: String(candidate.officeCode),
-      ballot: candidate.ballotNumber,
-      uf: candidate.uf,
-      year: "2026",
-    });
-
-    void fetch(`/api/candidates?${params}`, { signal: controller.signal, cache: "no-store" })
-      .then((response) => response.json())
-      .then((data) => {
-        setTicketMate(data.ticketMate ? sanitizeCandidateSummary(data.ticketMate as CandidateSummary) : null);
-      })
-      .catch(() => setTicketMate(null));
-
-    return () => controller.abort();
-  }, [candidate.ballotNumber, candidate.officeCode, candidate.uf, showsTicketMate]);
-
   return (
     <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${ticketMate ? " has-ticket-mate" : ""}`}>
       <button
@@ -431,12 +454,14 @@ function EmptyOfficeSlot({
 function CandidatePicker({
   office,
   selected,
+  ticketMate,
   isActive,
   onOpen,
   onInspect,
 }: {
   office: Office;
   selected: OfficeSelection;
+  ticketMate?: CandidateSummary | null;
   isActive: boolean;
   onOpen: () => void;
   onInspect: (candidate: CandidateSummary) => void;
@@ -446,6 +471,7 @@ function CandidatePicker({
       <SelectedOfficeCard
         office={office}
         candidate={selected.candidate}
+        ticketMate={ticketMate}
         onInspect={onInspect}
         onSwap={office.fixed ? undefined : onOpen}
         isActive={isActive}
@@ -541,6 +567,7 @@ export function BallotBuilder() {
   const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
   const [mobilePicker, setMobilePicker] = useState(false);
   const ballotRef = useRef<HTMLDivElement>(null);
+  const shareRef = useRef<HTMLDivElement>(null);
   const refreshedSavedSelections = useRef(false);
   const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
@@ -702,6 +729,7 @@ export function BallotBuilder() {
     () => OFFICES.some((office) => !office.fixed && selections[office.id] !== null),
     [selections],
   );
+  const ticketMates = useTicketMates(selections);
 
   const pickerOffice = OFFICES.find((office) => office.id === pickerOfficeId) ?? null;
   const showInlinePicker = Boolean(pickerOffice && !mobilePicker);
@@ -722,8 +750,10 @@ export function BallotBuilder() {
   }
 
   async function buildPdf() {
-    if (!ballotRef.current) throw new Error("Colinha indisponível");
-    const image = await toPng(ballotRef.current, {
+    const captureNode = shareRef.current;
+    if (!captureNode) throw new Error("Colinha indisponível");
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    const image = await toPng(captureNode, {
       cacheBust: true,
       pixelRatio: 2,
       backgroundColor: "#0d0f14",
@@ -753,6 +783,28 @@ export function BallotBuilder() {
     ].join("\n");
   }
 
+  async function createPdfFile() {
+    const pdf = await buildPdf();
+    return {
+      pdf,
+      file: new File([pdf.output("blob")], fileName(), { type: "application/pdf" }),
+    };
+  }
+
+  async function sharePdfFile(shareText: string) {
+    const { pdf, file } = await createPdfFile();
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: "Minha colinha 2026",
+        text: shareText,
+      });
+      return "shared" as const;
+    }
+    pdf.save(fileName());
+    return "saved" as const;
+  }
+
   function openWhatsAppShare(text: string) {
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.location.href = url;
@@ -761,7 +813,7 @@ export function BallotBuilder() {
   async function saveBallot() {
     setWorking("save");
     try {
-      const pdf = await buildPdf();
+      const { pdf } = await createPdfFile();
       pdf.save(fileName());
       setNotice("Sua colinha foi salva em PDF.");
     } catch {
@@ -774,19 +826,8 @@ export function BallotBuilder() {
   async function shareBallot() {
     setWorking("share");
     try {
-      const pdf = await buildPdf();
-      const file = new File([pdf.output("blob")], fileName(), { type: "application/pdf" });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: "Minha colinha 2026",
-          text: buildBallotShareText(),
-        });
-        setNotice("Colinha compartilhada.");
-      } else {
-        pdf.save(fileName());
-        setNotice("PDF salvo. Use WhatsApp para enviar a colinha em texto ou anexe o arquivo.");
-      }
+      const result = await sharePdfFile(buildBallotShareText());
+      setNotice(result === "shared" ? "Colinha compartilhada." : "PDF salvo. Anexe o arquivo para enviar.");
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         setNotice("Não foi possível compartilhar agora. Tente salvar o PDF.");
@@ -796,15 +837,22 @@ export function BallotBuilder() {
     }
   }
 
-  function shareBallotOnWhatsApp() {
+  async function shareBallotOnWhatsApp() {
     setWorking("whatsapp");
     try {
-      openWhatsAppShare(buildBallotShareText());
-      setNotice("Abrindo WhatsApp…");
-    } catch {
-      setNotice("Não foi possível abrir o WhatsApp agora.");
+      const result = await sharePdfFile("Minha colinha 2026 — São Paulo");
+      if (result === "shared") {
+        setNotice("Escolha WhatsApp para enviar o PDF.");
+      } else {
+        setNotice("PDF salvo. Abra o WhatsApp e anexe o arquivo baixado.");
+        openWhatsAppShare("Minha colinha 2026 — anexe o PDF que acabei de salvar.");
+      }
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        setNotice("Não foi possível compartilhar o PDF agora. Tente salvar a colinha.");
+      }
     } finally {
-      window.setTimeout(() => setWorking(null), 400);
+      setWorking(null);
     }
   }
 
@@ -857,6 +905,7 @@ export function BallotBuilder() {
                 office={office}
                 key={office.id}
                 selected={selections[office.id]}
+                ticketMate={ticketMates[office.id]}
                 isActive={pickerOfficeId === office.id}
                 onOpen={() => openPicker(office.id)}
                 onInspect={inspectCandidate}
@@ -900,7 +949,6 @@ export function BallotBuilder() {
                         key={office.id}
                         office={office}
                         selection={selections[office.id]}
-                        onSwap={office.fixed ? undefined : () => openPicker(office.id)}
                       />
                     ))}
                   </div>
@@ -945,6 +993,15 @@ export function BallotBuilder() {
       </footer>
 
       {profile && <ProfileDrawer candidate={profile} onClose={() => setProfile(null)} />}
+
+      <div ref={shareRef}>
+        <BallotShareSheet
+          selections={selections}
+          ticketMates={ticketMates}
+          duplicateSenator={duplicateSenator}
+        />
+      </div>
+
       {showModalPicker && pickerOffice && (
         <CandidatePickerPanel
           office={pickerOffice}

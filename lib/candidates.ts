@@ -209,7 +209,7 @@ export async function getTicketMateForHead(input: {
       WHERE election_year = $1
         AND uf = $2
         AND office_code = $3
-        AND ballot_number = $4
+        AND ltrim(ballot_number, '0') = ltrim($4, '0')
       LIMIT 1`,
     [input.year, input.uf, mateOfficeCode, input.ballotNumber],
   ) as CandidateRow[];
