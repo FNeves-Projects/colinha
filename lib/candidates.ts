@@ -1,9 +1,12 @@
 import { getSql, hasDatabase } from "./db";
 import { resolveStoredProposalUrl } from "./divulga-proposals";
-import { TERESINHA } from "./offices";
+import {
+  applyTeresinhaSlotIdentity,
+  isTeresinhaCandidate,
+  TERESINHA_ID,
+} from "./teresinha-slot";
 import { normalizeSocialLinks } from "./social-links";
 import { hasTicketSlate, slateMateOfficeCodes, ticketHeadOfficeCode, ticketHeadOfficeCodeFor } from "./ticket-mates";
-import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
 import type { Candidate, CandidateProposal, CandidateSummary, SocialLink } from "./types";
 
 type CandidateRow = {
@@ -42,7 +45,7 @@ type CandidateRelations = {
 };
 
 function mapRow(row: CandidateRow, related: CandidateRelations = { socials: [] }): Candidate {
-  return {
+  return applyTeresinhaSlotIdentity({
     id: String(row.id),
     sqCandidate: row.sq_candidate,
     electionYear: row.election_year,
@@ -68,7 +71,7 @@ function mapRow(row: CandidateRow, related: CandidateRelations = { socials: [] }
     source: row.source,
     sourceUpdatedAt: row.source_updated_at,
     proposals: related.proposals,
-  };
+  });
 }
 
 async function loadRelated(candidateId: string, options?: { includeProposals?: boolean }) {
@@ -105,23 +108,8 @@ async function loadRelated(candidateId: string, options?: { includeProposals?: b
   };
 }
 
-function withFixedSlotIdentity(fromDb: Candidate): Candidate {
-  return {
-    ...fromDb,
-    id: TERESINHA.id,
-  };
-}
-
-export async function getLiveTeresinha(): Promise<Candidate> {
-  const fromDb = await getCandidateBySqCandidate(TERESINHA_SQ_CANDIDATE);
-  const candidate = fromDb ? withFixedSlotIdentity(fromDb) : TERESINHA;
-  return hydrateCandidateDetails(candidate);
-}
-
 export function candidateProfileLookupId(summary: Pick<CandidateSummary, "id" | "sqCandidate">) {
-  return summary.id === TERESINHA.id || summary.sqCandidate === TERESINHA.sqCandidate
-    ? TERESINHA.id
-    : summary.id;
+  return isTeresinhaCandidate(summary) ? TERESINHA_ID : summary.id;
 }
 
 export function candidateFromSummary(summary: CandidateSummary): Candidate {
@@ -158,24 +146,6 @@ async function hydrateCandidateDetails(candidate: Candidate): Promise<Candidate>
   return mergeCandidateLiveBundle(candidate, bundle);
 }
 
-async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate | null> {
-  if (!hasDatabase()) return null;
-  const sql = getSql();
-  const rows = await sql.query(
-    `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
-            ballot_number, ballot_name, full_name, party_acronym, status,
-            birth_date::text, gender, marital_status, nationality, birthplace,
-            occupation, education, photo_url, tse_url, source,
-            source_updated_at::text
-       FROM candidates WHERE sq_candidate = $1 LIMIT 1`,
-    [sqCandidate],
-  ) as CandidateRow[];
-  const row = rows[0];
-  if (!row) return null;
-  const related = await loadRelated(row.id, { includeProposals: true });
-  return mapRow(row, related);
-}
-
 export async function listPartiesForOffice(input: {
   officeCode: number;
   uf: string;
@@ -209,9 +179,6 @@ export async function searchCandidates(input: {
   const limit = input.limit ?? (query ? 8 : 20);
   const party = input.party?.trim() || null;
 
-  if (input.officeCode === 6 && (query === "3088" || /teresinha/i.test(query))) {
-    return [await getLiveTeresinha()];
-  }
   if (!hasDatabase()) return [];
 
   const sql = getSql();
@@ -369,9 +336,6 @@ export async function getTicketMateForHead(input: {
 }
 
 export async function getCandidateById(id: string): Promise<Candidate | null> {
-  if (id === TERESINHA.id || id === TERESINHA_SQ_CANDIDATE) {
-    return getLiveTeresinha();
-  }
   if (!hasDatabase()) return null;
   const sql = getSql();
   const rows = await sql.query(
@@ -380,15 +344,13 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
             birth_date::text, gender, marital_status, nationality, birthplace,
             occupation, education, photo_url, tse_url, source,
             source_updated_at::text
-       FROM candidates WHERE id::text = $1 LIMIT 1`,
+       FROM candidates
+      WHERE id::text = $1 OR sq_candidate = $1
+      LIMIT 1`,
     [id],
   ) as CandidateRow[];
   const row = rows[0];
   if (!row) return null;
-  if (row.sq_candidate === TERESINHA_SQ_CANDIDATE) {
-    const related = await loadRelated(row.id, { includeProposals: true });
-    return hydrateCandidateDetails(withFixedSlotIdentity(mapRow(row, related)));
-  }
   const related = await loadRelated(row.id, { includeProposals: true });
   return hydrateCandidateDetails(mapRow(row, related));
 }

@@ -22,7 +22,12 @@ import {
   VolumeX,
   X,
 } from "lucide-react";
-import { OFFICES, TERESINHA, type Office } from "@/lib/offices";
+import { OFFICES, type Office } from "@/lib/offices";
+import {
+  isTeresinhaCandidate,
+  TERESINHA_ID,
+  teresinhaPlaceholderSummary,
+} from "@/lib/teresinha-slot";
 import {
   nullBallotNumber,
   normalizeSelections,
@@ -65,7 +70,7 @@ function initialSelections(): Selections {
     OFFICES.map((office) => [
       office.id,
       office.fixed
-        ? { type: "candidate", candidate: sanitizeCandidateSummary(TERESINHA) }
+        ? { type: "candidate", candidate: sanitizeCandidateSummary(teresinhaPlaceholderSummary()) }
         : null,
     ]),
   );
@@ -98,7 +103,11 @@ function sanitizeSelections(selections: Selections): Selections {
     OFFICES.map((office) => {
       const selection = selections[office.id] ?? null;
       if (office.fixed) {
-        return [office.id, { type: "candidate", candidate: sanitizeCandidateSummary(TERESINHA) } satisfies OfficeSelection];
+        const existing = selection?.type === "candidate" ? selection.candidate : null;
+        const candidate = existing && isTeresinhaCandidate(existing)
+          ? { ...existing, id: TERESINHA_ID }
+          : teresinhaPlaceholderSummary();
+        return [office.id, { type: "candidate", candidate: sanitizeCandidateSummary(candidate) } satisfies OfficeSelection];
       }
       if (selection?.type === "candidate") {
         return [office.id, { type: "candidate", candidate: sanitizeCandidateSummary(selection.candidate) }];
@@ -1200,8 +1209,8 @@ export function BallotBuilder() {
         if (!savedCandidate) return null;
 
         try {
-          const lookupId = office.fixed || savedCandidate.id === TERESINHA.id
-            ? TERESINHA.id
+          const lookupId = office.fixed || isTeresinhaCandidate(savedCandidate)
+            ? TERESINHA_ID
             : savedCandidate.id;
           const response = await fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, {
             cache: "no-store",

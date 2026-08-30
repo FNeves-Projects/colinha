@@ -68,17 +68,17 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 
 INSERT INTO candidates (
   sq_candidate, election_year, uf, office_code, office_name, ballot_number,
-  ballot_name, full_name, party_acronym, status, photo_url, source
+  ballot_name, full_name, party_acronym, photo_url, source
 ) VALUES (
   '250002530169', 2026, 'SP', 6, 'Deputada Federal', '3088',
-  'Teresinha Neves', 'Teresinha de Almeida Ramos Neves', 'NOVO', 'Registro no TSE',
-  'https://divulgacandcontas.tse.jus.br/divulga/rest/arquivo/img/20322002026/250002530169/70750', 'TSE'
+  'Teresinha Neves', 'Teresinha de Almeida Ramos Neves', 'NOVO',
+  '/candidate-photos/250002530169.jpg', 'TSE'
 )
 ON CONFLICT (sq_candidate) DO UPDATE SET
   ballot_number = EXCLUDED.ballot_number,
   ballot_name = EXCLUDED.ballot_name,
   full_name = EXCLUDED.full_name,
-  status = EXCLUDED.status,
-  photo_url = EXCLUDED.photo_url,
+  party_acronym = EXCLUDED.party_acronym,
+  photo_url = COALESCE(candidates.photo_url, EXCLUDED.photo_url),
   source = EXCLUDED.source,
   updated_at = now();
