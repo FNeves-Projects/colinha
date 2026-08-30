@@ -32,6 +32,9 @@ npm run dev
   and writes `/candidate-photos/{sq}.jpg` into `candidates.photo_url`. Cached ZIPs
   live in `data/tse-photos/`. Use `--local-only` to skip download, or `--force-download`
   to refresh the cache. Commit the generated files so Vercel can serve them on deploy.
+- Party logos come from the Câmara Dados Abertos API. Run `npm run sync:party-logos`
+  locally to refresh `public/party-logos/` and `lib/party-logos.generated.json`.
+  Parties without an official logo file fall back to the colored acronym badge.
 - Social links are shown as declared to the Brazilian Electoral Justice system.
 - If TSE changes the file URLs, configure the `TSE_*_URL` variables in Vercel.
 

@@ -10,6 +10,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "sync:tse": "tsx scripts/sync-tse.ts",
     "sync:photos": "tsx scripts/sync-photos.ts",
+    "sync:party-logos": "tsx scripts/sync-party-logos.ts",
     "photos": "npm run sync:photos",
     "repair:socials": "tsx scripts/repair-social-links.ts",
     "repair:photos": "tsx scripts/repair-photo-urls.ts",

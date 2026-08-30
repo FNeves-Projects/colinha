@@ -21,12 +21,15 @@ import {
   normalizeSelections,
   selectionCandidate,
   selectionNotice,
+  selectionPickerLabel,
+  selectionRemoveLabel,
   selectionShareLine,
   type OfficeSelection,
   type Selections,
   type SpecialVoteKind,
 } from "@/lib/ballot-selections";
-import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
+import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
+import { previewOfficeLabel } from "@/lib/party-styles";
 import { hasTicketMate, ticketMateRoleLabel } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
@@ -140,18 +143,99 @@ function NumberBoxes({ number, digits }: { number?: string; digits: number }) {
 
 function PartyBadge({ acronym }: { acronym: string | null | undefined }) {
   if (!acronym) return null;
-  const style = partyStyleForAcronym(acronym);
+  const logoUrl = partyLogoUrl(acronym);
+  const fallback = partyBadgeFallback(acronym);
   return (
     <div className="party-badge">
-      <span className="party-badge-mark" style={{ background: style.background, color: style.color }}>
-        {acronym}
-      </span>
+      {logoUrl ? (
+        <span className="party-badge-logo">
+          <Image src={logoUrl} alt="" width={44} height={44} unoptimized />
+        </span>
+      ) : (
+        <span className="party-badge-mark" style={{ background: fallback.background, color: fallback.color }}>
+          {acronym}
+        </span>
+      )}
       <span className="party-badge-label">{acronym}</span>
     </div>
   );
 }
 
-function BallotPreviewRow({ office, selection }: { office: Office; selection: OfficeSelection }) {
+function BallotPreviewCandidateRow({
+  office,
+  candidate,
+  officeLabel,
+  onSwap,
+}: {
+  office: Office;
+  candidate: CandidateSummary;
+  officeLabel: string;
+  onSwap?: () => void;
+}) {
+  const [ticketMate, setTicketMate] = useState<CandidateSummary | null>(null);
+  const showsTicketMate = hasTicketMate(candidate.officeCode);
+
+  useEffect(() => {
+    if (!showsTicketMate) {
+      setTicketMate(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      ticketMate: "1",
+      headOffice: String(candidate.officeCode),
+      ballot: candidate.ballotNumber,
+      uf: candidate.uf,
+      year: "2026",
+    });
+
+    void fetch(`/api/candidates?${params}`, { signal: controller.signal, cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        setTicketMate(data.ticketMate ? sanitizeCandidateSummary(data.ticketMate as CandidateSummary) : null);
+      })
+      .catch(() => setTicketMate(null));
+
+    return () => controller.abort();
+  }, [candidate.ballotNumber, candidate.officeCode, candidate.uf, showsTicketMate]);
+
+  return (
+    <div className={`ballot-row ballot-row-filled${ticketMate ? " has-ticket-mate" : ""}`}>
+      <div className="ballot-row-photo-stack">
+        {ticketMate && (
+          <div className="ballot-ticket-mate-wrap" aria-hidden="true">
+            <CandidatePhoto candidate={ticketMate} className="candidate-photo ballot-ticket-mate-photo" size={56} />
+          </div>
+        )}
+        <CandidatePhoto candidate={candidate} className="candidate-photo ballot-head-photo" size={68} />
+      </div>
+      <div className="ballot-row-main">
+        <span className="ballot-row-office">{officeLabel}</span>
+        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
+        <strong className="ballot-row-name">{candidate.ballotName}</strong>
+      </div>
+      <div className="ballot-row-side">
+        {onSwap && (
+          <button className="ballot-row-swap" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
+            <ArrowLeftRight size={15} strokeWidth={2.2} />
+          </button>
+        )}
+        <PartyBadge acronym={candidate.partyAcronym} />
+      </div>
+    </div>
+  );
+}
+
+function BallotPreviewRow({
+  office,
+  selection,
+  onSwap,
+}: {
+  office: Office;
+  selection: OfficeSelection;
+  onSwap?: () => void;
+}) {
   const officeLabel = previewOfficeLabel(office.id, office.label);
 
   if (!selection) {
@@ -167,7 +251,7 @@ function BallotPreviewRow({ office, selection }: { office: Office; selection: Of
 
   if (selection.type === "special") {
     return (
-      <div className="ballot-row ballot-row-empty">
+      <div className="ballot-row ballot-row-empty ballot-row-filled">
         <div className="ballot-row-main">
           <span className="ballot-row-office">{officeLabel}</span>
           {selection.vote === "branco" ? (
@@ -179,25 +263,22 @@ function BallotPreviewRow({ office, selection }: { office: Office; selection: Of
             </>
           )}
         </div>
+        {onSwap && (
+          <button className="ballot-row-swap ballot-row-swap-special" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
+            <ArrowLeftRight size={15} strokeWidth={2.2} />
+          </button>
+        )}
       </div>
     );
   }
 
-  const candidate = selection.candidate;
   return (
-    <div className="ballot-row">
-      <div className="ballot-row-photo">
-        <CandidatePhoto candidate={candidate} size={68} />
-      </div>
-      <div className="ballot-row-main">
-        <span className="ballot-row-office">{officeLabel}</span>
-        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
-        <strong className="ballot-row-name">{candidate.ballotName}</strong>
-      </div>
-      <div className="ballot-row-party">
-        <PartyBadge acronym={candidate.partyAcronym} />
-      </div>
-    </div>
+    <BallotPreviewCandidateRow
+      office={office}
+      candidate={selection.candidate}
+      officeLabel={officeLabel}
+      onSwap={office.fixed ? undefined : onSwap}
+    />
   );
 }
 
@@ -227,7 +308,7 @@ function SpecialVoteCard({
         </small>
       </div>
       <div className="selected-number">
-        <button className="clear-button" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
+        <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
           <ArrowLeftRight size={16} strokeWidth={2.2} />
         </button>
         {vote === "branco" ? (
@@ -311,7 +392,7 @@ function SelectedOfficeCard({
       </button>
       <div className="selected-number">
         {!office.fixed && onSwap && (
-          <button className="clear-button" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
+          <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
             <ArrowLeftRight size={16} strokeWidth={2.2} />
           </button>
         )}
@@ -603,6 +684,25 @@ export function BallotBuilder() {
     setPickerOfficeId(officeId);
   }
 
+  function clearOffice(officeId: string) {
+    const office = OFFICES.find((item) => item.id === officeId);
+    if (!office || office.fixed) return;
+    setSelections((current) => ({ ...current, [officeId]: null }));
+    setPickerOfficeId(null);
+    setNotice("Escolha removida da colinha.");
+  }
+
+  function clearBallot() {
+    setSelections(initialSelections());
+    setPickerOfficeId(null);
+    setNotice("Colinha esvaziada. Deputada Federal mantida.");
+  }
+
+  const hasClearableSelections = useMemo(
+    () => OFFICES.some((office) => !office.fixed && selections[office.id] !== null),
+    [selections],
+  );
+
   const pickerOffice = OFFICES.find((office) => office.id === pickerOfficeId) ?? null;
   const showInlinePicker = Boolean(pickerOffice && !mobilePicker);
   const showModalPicker = Boolean(pickerOffice && mobilePicker);
@@ -626,7 +726,7 @@ export function BallotBuilder() {
     const image = await toPng(ballotRef.current, {
       cacheBust: true,
       pixelRatio: 2,
-      backgroundColor: "#ffffff",
+      backgroundColor: "#0d0f14",
     });
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const properties = pdf.getImageProperties(image);
@@ -779,9 +879,11 @@ export function BallotBuilder() {
             <CandidatePickerPanel
               office={pickerOffice}
               presentation="inline"
+              currentSelection={selections[pickerOffice.id]}
               onClose={() => setPickerOfficeId(null)}
               onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
               onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
+              onClearCurrent={() => clearOffice(pickerOffice.id)}
             />
           ) : (
             <>
@@ -798,6 +900,7 @@ export function BallotBuilder() {
                         key={office.id}
                         office={office}
                         selection={selections[office.id]}
+                        onSwap={office.fixed ? undefined : () => openPicker(office.id)}
                       />
                     ))}
                   </div>
@@ -822,6 +925,14 @@ export function BallotBuilder() {
                   {working === "whatsapp" ? <span className="button-spinner" /> : "WhatsApp"}
                 </button>
               </div>
+              <button
+                className="clear-ballot-button"
+                type="button"
+                onClick={clearBallot}
+                disabled={!hasClearableSelections}
+              >
+                Esvaziar colinha
+              </button>
               <p className="privacy-note"><LockKeyhole size={14} /> Suas escolhas ficam somente neste aparelho.</p>
             </>
           )}
@@ -838,9 +949,11 @@ export function BallotBuilder() {
         <CandidatePickerPanel
           office={pickerOffice}
           presentation="modal"
+          currentSelection={selections[pickerOffice.id]}
           onClose={() => setPickerOfficeId(null)}
           onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
           onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
+          onClearCurrent={() => clearOffice(pickerOffice.id)}
         />
       )}
     </main>

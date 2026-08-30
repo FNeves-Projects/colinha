@@ -50,6 +50,21 @@ export function selectionNotice(selection: OfficeSelection) {
   return "";
 }
 
+export function selectionPickerLabel(selection: OfficeSelection) {
+  if (!selection) return null;
+  if (selection.type === "candidate") return selection.candidate.ballotName;
+  if (selection.type === "special") return selection.vote === "branco" ? "Branco" : "Nulo";
+  return null;
+}
+
+export function selectionRemoveLabel(selection: OfficeSelection) {
+  if (!selection) return "Remover da colinha";
+  if (selection.type === "special" && selection.vote === "branco") return "Remover BRANCO da colinha";
+  if (selection.type === "special") return "Remover NULO da colinha";
+  if (selection.type === "candidate") return `Remover ${selection.candidate.ballotName} da colinha`;
+  return "Remover da colinha";
+}
+
 function isLegacyCandidate(value: unknown): value is CandidateSummary {
   return Boolean(
     value

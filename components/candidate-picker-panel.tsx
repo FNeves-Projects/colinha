@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useId, useState } from "react";
 import { Filter, Search, X } from "lucide-react";
-import { nullBallotNumber, type SpecialVoteKind } from "@/lib/ballot-selections";
+import { nullBallotNumber, selectionPickerLabel, selectionRemoveLabel, type OfficeSelection, type SpecialVoteKind } from "@/lib/ballot-selections";
 import type { Office } from "@/lib/offices";
 import type { CandidateSummary } from "@/lib/types";
 
@@ -88,15 +88,19 @@ function VoteOptionButtons({
 export function CandidatePickerPanel({
   office,
   presentation,
+  currentSelection = null,
   onClose,
   onSelect,
   onSelectSpecial,
+  onClearCurrent,
 }: {
   office: Office;
   presentation: "inline" | "modal";
+  currentSelection?: OfficeSelection;
   onClose: () => void;
   onSelect: (candidate: CandidateSummary) => void;
   onSelectSpecial: (vote: SpecialVoteKind) => void;
+  onClearCurrent?: () => void;
 }) {
   const partyFilterId = useId();
   const [query, setQuery] = useState("");
@@ -172,6 +176,9 @@ export function CandidatePickerPanel({
     };
   }, [presentation]);
 
+  const currentLabel = selectionPickerLabel(currentSelection);
+  const currentCandidate = currentSelection?.type === "candidate" ? currentSelection.candidate : null;
+
   const panel = (
     <section
       className={`picker-panel picker-panel-${presentation}`}
@@ -189,6 +196,27 @@ export function CandidatePickerPanel({
           <X size={20} />
         </button>
       </div>
+
+      {currentLabel && onClearCurrent && !office.fixed && (
+        <div className="picker-current">
+          <div className="picker-current-main">
+            {currentCandidate && <PickerPhoto candidate={currentCandidate} />}
+            <div>
+              <span className="picker-current-kicker">Escolha atual</span>
+              <strong>{currentLabel}</strong>
+              {currentSelection?.type === "special" && currentSelection.vote === "nulo" && (
+                <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+              )}
+              {currentSelection?.type === "special" && currentSelection.vote === "branco" && (
+                <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
+              )}
+            </div>
+          </div>
+          <button type="button" className="picker-clear-current" onClick={onClearCurrent}>
+            {selectionRemoveLabel(currentSelection)}
+          </button>
+        </div>
+      )}
 
       <div className="picker-toolbar">
         <div className="search-field picker-search">
@@ -221,7 +249,7 @@ export function CandidatePickerPanel({
         {results.map((candidate) => (
           <button
             type="button"
-            className="picker-result-main"
+            className={`picker-result-main${currentCandidate?.id === candidate.id ? " is-current" : ""}`}
             key={candidate.id}
             onClick={() => onSelect(candidate)}
           >
