@@ -1040,11 +1040,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .vote-option {
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "label value"
-    "tip tip";
-  gap: 4px 8px;
-  align-content: start;
+  grid-template-areas: "label value";
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 .vote-option:hover:not(:disabled) { color: var(--ink); }
@@ -1058,12 +1056,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .vote-option .ballot-blank-pill-compact {
   grid-area: value;
   justify-self: end;
-}
-.vote-option-tip {
-  grid-area: tip;
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.4;
 }
 .office-card.special-vote {
   border-color: #d5dbe6;

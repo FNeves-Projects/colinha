@@ -486,11 +486,6 @@ function SpecialVoteCard({
           <span>{office.label}</span>
         </div>
         <strong>{vote === "branco" ? "Voto em branco" : "Voto nulo"}</strong>
-        <small>
-          {vote === "branco"
-            ? "Aperte BRANCO na urna. Não escolhe ninguém para o cargo."
-            : "Digite um número inexistente na urna. Anula o voto naquele cargo."}
-        </small>
       </div>
       <div className="selected-number has-swap-action">
         <button className="btn-glass btn-glass--chip swap-button swap-button-rail" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>

@@ -70,16 +70,10 @@ function VoteOptionButtons({
       <button type="button" className="btn-glass btn-glass--card btn-glass--card-null vote-option vote-option-null" onClick={() => onSelect("nulo")}>
         <span className="vote-option-label">Votar nulo</span>
         <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
-        <span className="vote-option-tip">
-          Número que não existe. Anula o voto naquele cargo. Fonte: TSE.
-        </span>
       </button>
       <button type="button" className="btn-glass btn-glass--card vote-option vote-option-blank" onClick={() => onSelect("branco")}>
         <span className="vote-option-label">Votar em branco</span>
         <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
-        <span className="vote-option-tip">
-          Aperte BRANCO na urna. Não escolhe ninguém para o cargo. Fonte: TSE.
-        </span>
       </button>
     </div>
   );
