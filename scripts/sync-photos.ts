@@ -1,5 +1,8 @@
+import dns from "node:dns";
 import "./load-env";
 import { syncCandidatePhotosToBlob } from "../lib/candidate-photo-blob";
+
+dns.setDefaultResultOrder("ipv4first");
 
 function parseLimitArg() {
   const raw = process.argv.find((arg) => arg.startsWith("--limit="))?.slice("--limit=".length)
@@ -7,6 +10,13 @@ function parseLimitArg() {
   if (!raw || raw.startsWith("--")) return undefined;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : undefined;
+}
+
+function log(message: string) {
+  console.log(message);
+  if (process.stdout.isTTY === false) {
+    process.stdout.write("");
+  }
 }
 
 async function main() {
@@ -17,13 +27,17 @@ async function main() {
     throw new Error("BLOB_READ_WRITE_TOKEN is not configured.");
   }
 
+  const useZip = process.argv.includes("--zip");
+  log(useZip ? "Photo ZIP archives enabled." : "Downloading photos one by one (Ctrl+C to stop).");
+
   const result = await syncCandidatePhotosToBlob({
     allowTseDownload: true,
+    skipZip: !useZip,
     limit: parseLimitArg(),
-    onProgress: (message) => console.log(message),
+    onProgress: log,
   });
 
-  console.log("Photo sync completed", result);
+  log(`Photo sync completed ${JSON.stringify(result, null, 2)}`);
   if (result.photoBlobFailedCount > 0) {
     process.exitCode = 1;
   }

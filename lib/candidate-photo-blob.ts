@@ -1,7 +1,7 @@
 import { put } from "@vercel/blob";
 import { getSql } from "./db";
 import { loadTsePhotoArchive } from "./tse-photo-archive";
-import { TSE_FETCH_HEADERS } from "./tse-fetch";
+import { fetchTse, TSE_PHOTO_FETCH_TIMEOUT_MS } from "./tse-fetch";
 import {
   TSE_CANDIDATE_PHOTO_BASE,
   TSE_ELECTION_ID_2026,
@@ -35,6 +35,7 @@ export type CandidatePhotoBlobSyncResult = {
 export type CandidatePhotoBlobSyncOptions = {
   /** Local machines can reach TSE; Vercel datacenter IPs get HTTP 403. */
   allowTseDownload?: boolean;
+  skipZip?: boolean;
   limit?: number;
   concurrency?: number;
   onProgress?: (message: string) => void;
@@ -42,9 +43,8 @@ export type CandidatePhotoBlobSyncOptions = {
 
 const DEFAULT_PHOTO_SYNC_LIMIT = 200;
 const DEFAULT_LOCAL_PHOTO_SYNC_LIMIT = 20_000;
-const PHOTO_FETCH_TIMEOUT_MS = 20_000;
 const PHOTO_UPLOAD_CACHE_SECONDS = 31_536_000;
-const DEFAULT_FETCH_CONCURRENCY = 4;
+const DEFAULT_FETCH_CONCURRENCY = 6;
 const PUBLIC_BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
 const LOCAL_SYNC_HINT =
   "TSE/Akamai blocks Vercel IPs with HTTP 403. Run `npm run sync:photos` from a local machine that can open the photo URL.";
@@ -103,11 +103,8 @@ function blobPathname(row: CandidatePhotoRow, extension: string) {
   return `candidate-photos/${TSE_ELECTION_ID_2026}/${row.uf}/${row.sq_candidate}.${extension}`;
 }
 
-function toBlobPart(bytes: ArrayBuffer | Uint8Array): BlobPart {
-  if (bytes instanceof Uint8Array) {
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  }
-  return bytes;
+function toNodeBuffer(bytes: ArrayBuffer | Uint8Array) {
+  return Buffer.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
 }
 
 async function mapPool<T>(
@@ -132,7 +129,7 @@ async function mapPool<T>(
 async function uploadPhotoBytes(row: CandidatePhotoRow, bytes: ArrayBuffer | Uint8Array, contentType: string) {
   const extension = extensionForContentType(contentType);
   const pathname = blobPathname(row, extension);
-  const blob = await put(pathname, new Blob([toBlobPart(bytes)], { type: contentType }), {
+  const blob = await put(pathname, toNodeBuffer(bytes), {
     access: "public",
     addRandomSuffix: false,
     allowOverwrite: true,
@@ -153,10 +150,7 @@ async function fetchCandidatePhotoFromUrls(row: CandidatePhotoRow) {
   const errors: string[] = [];
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
-        headers: TSE_FETCH_HEADERS,
-        signal: AbortSignal.timeout(PHOTO_FETCH_TIMEOUT_MS),
-      });
+      const response = await fetchTse(url, TSE_PHOTO_FETCH_TIMEOUT_MS);
 
       const contentType = response.headers.get("content-type")?.split(";")[0]?.toLowerCase() ?? "";
       if (!response.ok) {
@@ -198,6 +192,7 @@ export async function syncCandidatePhotosToBlob(
   options: CandidatePhotoBlobSyncOptions = {},
 ): Promise<CandidatePhotoBlobSyncResult> {
   const allowTseDownload = options.allowTseDownload ?? !isRunningOnVercel();
+  const skipZip = options.skipZip ?? true;
   const fallbackLimit = allowTseDownload ? DEFAULT_LOCAL_PHOTO_SYNC_LIMIT : DEFAULT_PHOTO_SYNC_LIMIT;
   const limit = options.limit ?? parsePhotoSyncLimit(fallbackLimit);
   const concurrency = options.concurrency ?? DEFAULT_FETCH_CONCURRENCY;
@@ -254,31 +249,46 @@ export async function syncCandidatePhotosToBlob(
   result.photoBlobSkippedCount = rows.length - pendingRows.length;
   log(`Pending photos: ${pendingRows.length}`);
 
-  const archiveLoad = await loadTsePhotoArchive(
-    pendingRows.map((row) => row.sq_candidate),
-    pendingRows.map((row) => row.uf),
-  );
-  result.photoBlobArchiveZipCount = archiveLoad.loadedZipCount;
-  result.photoBlobArchivePhotoCount = archiveLoad.loadedPhotoCount;
-  result.photoBlobArchiveErrors = archiveLoad.errors.slice(0, 4);
-  log(`Photo ZIP archives loaded: ${archiveLoad.loadedZipCount} (${archiveLoad.loadedPhotoCount} photos)`);
+  let archive = new Map<string, { bytes: Uint8Array; contentType: string }>();
+  if (skipZip) {
+    log("Skipping TSE photo ZIPs; downloading individual photos.");
+  } else {
+    const archiveLoad = await loadTsePhotoArchive(
+      pendingRows.map((row) => row.sq_candidate),
+      pendingRows.map((row) => row.uf),
+    );
+    result.photoBlobArchiveZipCount = archiveLoad.loadedZipCount;
+    result.photoBlobArchivePhotoCount = archiveLoad.loadedPhotoCount;
+    result.photoBlobArchiveErrors = archiveLoad.errors.slice(0, 4);
+    log(`Photo ZIP archives loaded: ${archiveLoad.loadedZipCount} (${archiveLoad.loadedPhotoCount} photos)`);
+    archive = archiveLoad.archive;
+  }
+
+  log(`Starting downloads (${concurrency} at a time)...`);
 
   await mapPool(pendingRows, concurrency, async (row, index) => {
+    const position = index + 1;
+    if (position <= 5) {
+      log(`fetch ${position}/${pendingRows.length} ${row.sq_candidate}`);
+    }
     try {
-      const blobUrl = await uploadCandidatePhoto(row, archiveLoad.archive);
+      const blobUrl = await uploadCandidatePhoto(row, archive);
       await sql.query(
         `UPDATE candidates SET photo_url = $2, updated_at = now() WHERE id = $1`,
         [row.id, blobUrl],
       );
       result.photoBlobUploadedCount += 1;
-      if ((index + 1) % 25 === 0 || index === 0 || index === pendingRows.length - 1) {
-        log(`Uploaded ${result.photoBlobUploadedCount}/${pendingRows.length} (${row.sq_candidate})`);
+      if (position <= 5 || position % 10 === 0 || position === pendingRows.length) {
+        log(`ok ${position}/${pendingRows.length} ${row.sq_candidate}`);
       }
     } catch (error) {
       result.photoBlobFailedCount += 1;
+      const message = error instanceof Error ? error.message : String(error);
       if (result.photoBlobErrors.length < 8) {
-        const message = error instanceof Error ? error.message : String(error);
         result.photoBlobErrors.push(`${row.sq_candidate}: ${message.slice(0, 240)}`);
+      }
+      if (result.photoBlobFailedCount <= 8 || position % 25 === 0) {
+        log(`fail ${position}/${pendingRows.length} ${row.sq_candidate}: ${message.slice(0, 160)}`);
       }
     }
   });

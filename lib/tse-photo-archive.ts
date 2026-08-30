@@ -1,5 +1,5 @@
 import { unzipSync } from "fflate";
-import { TSE_FETCH_HEADERS, TSE_PHOTO_ZIP_TIMEOUT_MS } from "./tse-fetch";
+import { fetchTse, TSE_PHOTO_ZIP_TIMEOUT_MS } from "./tse-fetch";
 
 export type TsePhotoAsset = {
   bytes: Uint8Array;
@@ -57,10 +57,7 @@ function urlsForUfs(neededUfs: Set<string>) {
 }
 
 async function downloadPhotoZip(url: string) {
-  const response = await fetch(url, {
-    headers: TSE_FETCH_HEADERS,
-    signal: AbortSignal.timeout(TSE_PHOTO_ZIP_TIMEOUT_MS),
-  });
+  const response = await fetchTse(url, TSE_PHOTO_ZIP_TIMEOUT_MS);
   if (!response.ok) {
     throw new Error(`${response.status} ${url}`);
   }
