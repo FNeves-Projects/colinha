@@ -95,6 +95,8 @@ const DIVULGA_TARGETS = [
   { uf: "SP", officeCode: 3, officeName: "Governador" },
   { uf: "SP", officeCode: 4, officeName: "Vice-governador" },
   { uf: "SP", officeCode: 5, officeName: "Senador" },
+  { uf: "SP", officeCode: 9, officeName: "1o Suplente Senador" },
+  { uf: "SP", officeCode: 10, officeName: "2o Suplente Senador" },
   { uf: "SP", officeCode: 6, officeName: "Deputado Federal" },
   { uf: "SP", officeCode: 7, officeName: "Deputado Estadual" },
   { uf: "BR", officeCode: 1, officeName: "Presidente" },

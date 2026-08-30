@@ -152,6 +152,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-weight: 900;
 }
 .office-list { display: grid; gap: 10px; }
+.office-card.has-slate {
+  margin-left: 12px;
+}
 .office-card {
   position: relative;
   display: flex;
@@ -162,9 +165,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border: 1px solid var(--line);
   border-radius: 15px;
   background: white;
+  overflow: visible;
   transition: border-color .2s, box-shadow .2s, transform .2s;
 }
 .office-card.selected { border-color: #bed0f6; background: #f9fbff; }
+.office-card.selected:hover,
+.office-card.selected:focus-within {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.1);
+}
 .office-card.is-picking {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(23, 55, 127, 0.12);
@@ -203,64 +212,63 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   color: inherit;
   text-align: left;
   cursor: pointer;
-}
-.office-card-photo-stack {
-  position: relative;
-  flex: 0 0 auto;
-  width: 58px;
-  height: 58px;
-}
-.office-card.has-ticket-mate .office-card-photo-stack {
-  width: 72px;
-}
-.ticket-head-photo {
   position: relative;
   z-index: 2;
-  transition: transform .22s ease, box-shadow .22s ease;
 }
-.ticket-mate-photo-wrap {
+.office-card-slate {
   position: absolute;
-  z-index: 1;
-  left: -10px;
-  top: 3px;
-  opacity: 0;
-  transform: translateX(10px) scale(0.94);
-  transition: opacity .22s ease, transform .22s ease;
+  inset: 0;
   pointer-events: none;
+  z-index: 0;
 }
-.ticket-mate-photo {
-  width: 52px !important;
-  height: 52px !important;
+.office-card-slate-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translateX(0) scale(0.985);
+  transition: opacity .22s ease, transform .22s ease;
+}
+.office-card.has-slate:hover .office-card-slate-layer,
+.office-card.has-slate:focus-within .office-card-slate-layer {
+  opacity: 1;
+  transform:
+    translateX(calc(-12px * var(--slate-layer)))
+    translateY(calc(1px * var(--slate-layer)))
+    rotate(calc(-1.25deg * var(--slate-layer)))
+    scale(0.985);
+}
+.office-card-slate-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d5dbe6;
+  border-radius: 15px;
+  background: #f4f7fc;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.08);
+}
+.office-card-slate-block .candidate-photo {
+  width: 48px;
+  height: 48px;
   border-radius: 11px;
-  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.14);
 }
-.ticket-mate-tag {
-  display: block;
-  margin-top: 4px;
+.office-card-slate-label {
   color: var(--muted);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: .04em;
-  text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
 }
-.office-card-body:hover .ticket-mate-photo-wrap,
-.office-card-body:focus-visible .ticket-mate-photo-wrap {
-  opacity: 1;
-  transform: translateX(0) scale(1);
-}
-.office-card-body:hover .ticket-head-photo,
-.office-card-body:focus-visible .ticket-head-photo {
-  transform: translateX(12px);
-}
 @media (hover: none) {
-  .office-card.has-ticket-mate .ticket-mate-photo-wrap {
+  .office-card.has-slate .office-card-slate-layer {
     opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-  .office-card.has-ticket-mate .ticket-head-photo {
-    transform: translateX(12px);
+    transform:
+      translateX(calc(-12px * var(--slate-layer)))
+      translateY(calc(1px * var(--slate-layer)))
+      rotate(calc(-1.25deg * var(--slate-layer)))
+      scale(0.985);
   }
 }
 .office-card.selected .office-card-body:hover .office-card-copy > strong {
@@ -289,17 +297,25 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   color: var(--muted);
   transition: color .15s, background .15s;
 }
+.selected-number {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: max-content;
+  position: relative;
+  z-index: 2;
+}
+.selected-number .number-boxes,
+.selected-number .ballot-blank-pill-compact {
+  flex-shrink: 0;
+}
 .swap-button:hover {
   color: var(--blue);
   background: #edf2ff;
 }
-.swap-button-corner {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 3;
-}
-.selected-number { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: fit-content; }
 .number-boxes { display: inline-flex; gap: 4px; }
 .number-box {
   display: grid;
@@ -478,6 +494,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .ballot-share-rows { display: grid; gap: 8px; }
 .ballot-share-row {
+  position: relative;
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr) 64px;
   align-items: center;
@@ -497,34 +514,42 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   width: 68px;
   height: 68px;
 }
-.ballot-share-row.has-ticket-mate .ballot-share-photo-stack {
-  width: 82px;
-}
-.ballot-share-head-photo {
+.ballot-share-row.has-slate .ballot-share-photo-stack {
   position: relative;
   z-index: 2;
-  transform: translateX(14px);
+  transform: translateX(0);
 }
-.ballot-share-ticket-mate-wrap {
+.ballot-share-slate {
   position: absolute;
-  z-index: 1;
-  left: -14px;
-  top: 4px;
-  opacity: 1;
-  transform: translateX(0) scale(1);
+  inset: 0;
   pointer-events: none;
+  z-index: 0;
+}
+.ballot-share-slate-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+  transform:
+    translateX(calc(-12px * var(--slate-layer)))
+    translateY(calc(1px * var(--slate-layer)))
+    rotate(calc(-1.25deg * var(--slate-layer)))
+    scale(0.985);
+}
+.ballot-share-slate-photo {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 10px;
+  transform: translateY(-50%);
+  box-shadow: 0 8px 18px rgba(0,0,0,.35);
 }
 .ballot-share-photo-stack .candidate-photo {
   width: 68px;
   height: 68px;
   border-color: rgba(255,255,255,.25);
   border-radius: 10px;
-}
-.ballot-share-ticket-mate-photo {
-  width: 56px !important;
-  height: 56px !important;
-  border-radius: 10px;
-  box-shadow: 0 8px 18px rgba(0,0,0,.35);
 }
 .ballot-share-main {
   display: flex;

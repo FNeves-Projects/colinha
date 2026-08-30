@@ -1,7 +1,7 @@
 import { getSql, hasDatabase } from "./db";
 import { TERESINHA } from "./offices";
 import { normalizeSocialLinks } from "./social-links";
-import { ticketMateOfficeCode } from "./ticket-mates";
+import { slateMateOfficeCodes } from "./ticket-mates";
 import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
 import type { Candidate, CandidateSummary, SocialLink } from "./types";
 
@@ -190,14 +190,14 @@ export async function searchCandidates(input: {
   return rows.map((row) => mapRow(row));
 }
 
-export async function getTicketMateForHead(input: {
+export async function getTicketSlateForHead(input: {
   headOfficeCode: number;
   ballotNumber: string;
   uf: string;
   year: number;
-}): Promise<CandidateSummary | null> {
-  const mateOfficeCode = ticketMateOfficeCode(input.headOfficeCode);
-  if (!mateOfficeCode || !hasDatabase()) return null;
+}): Promise<CandidateSummary[]> {
+  const mateOfficeCodes = slateMateOfficeCodes(input.headOfficeCode);
+  if (!mateOfficeCodes.length || !hasDatabase()) return [];
 
   const sql = getSql();
   const rows = await sql.query(
@@ -208,14 +208,23 @@ export async function getTicketMateForHead(input: {
        FROM candidates
       WHERE election_year = $1
         AND uf = $2
-        AND office_code = $3
+        AND office_code = ANY($3::int[])
         AND ltrim(ballot_number, '0') = ltrim($4, '0')
-      LIMIT 1`,
-    [input.year, input.uf, mateOfficeCode, input.ballotNumber],
+      ORDER BY office_code`,
+    [input.year, input.uf, mateOfficeCodes, input.ballotNumber],
   ) as CandidateRow[];
 
-  const row = rows[0];
-  return row ? mapRow(row) : null;
+  return rows.map((row) => mapRow(row));
+}
+
+export async function getTicketMateForHead(input: {
+  headOfficeCode: number;
+  ballotNumber: string;
+  uf: string;
+  year: number;
+}): Promise<CandidateSummary | null> {
+  const slate = await getTicketSlateForHead(input);
+  return slate[0] ?? null;
 }
 
 export async function getCandidateById(id: string): Promise<Candidate | null> {

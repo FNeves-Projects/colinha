@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCandidateById, getTicketMateForHead, listPartiesForOffice, searchCandidates } from "@/lib/candidates";
+import { getCandidateById, getTicketSlateForHead, listPartiesForOffice, searchCandidates } from "@/lib/candidates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,13 +43,13 @@ export async function GET(request: NextRequest) {
       if (!params.success) {
         return NextResponse.json({ error: "Invalid ticket mate lookup." }, { status: 400 });
       }
-      const ticketMate = await getTicketMateForHead({
+      const slate = await getTicketSlateForHead({
         headOfficeCode: params.data.headOffice,
         ballotNumber: params.data.ballot,
         uf: params.data.uf,
         year: params.data.year,
       });
-      return NextResponse.json({ ticketMate }, { headers: { "Cache-Control": "no-store" } });
+      return NextResponse.json({ ticketMate: slate[0] ?? null, slate }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (request.nextUrl.searchParams.get("parties") === "1") {

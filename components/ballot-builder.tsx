@@ -30,13 +30,13 @@ import {
 } from "@/lib/ballot-selections";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
 import { previewOfficeLabel } from "@/lib/party-styles";
-import { ticketMateRoleLabel } from "@/lib/ticket-mates";
+import { slateMateRoleLabel } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
 import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
-import { useTicketMates } from "@/hooks/use-ticket-mates";
+import { useTicketSlates } from "@/hooks/use-ticket-mates";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
 const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
@@ -212,25 +212,53 @@ function BallotPreviewRow({ office, selection }: { office: Office; selection: Of
   );
 }
 
+function OfficeCardSlate({
+  headOfficeCode,
+  members,
+}: {
+  headOfficeCode: number;
+  members: CandidateSummary[];
+}) {
+  if (!members.length) return null;
+
+  return (
+    <div className="office-card-slate" aria-hidden="true">
+      {members.map((member, index) => (
+        <div className="office-card-slate-layer" key={member.id} style={{ ["--slate-layer" as string]: index + 1 }}>
+          <div className="office-card-slate-block">
+            <CandidatePhoto candidate={member} size={48} />
+            <span className="office-card-slate-label">{slateMateRoleLabel(headOfficeCode, member.officeCode)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BallotShareCandidateRow({
   office,
   candidate,
   officeLabel,
-  ticketMate,
+  slate,
 }: {
   office: Office;
   candidate: CandidateSummary;
   officeLabel: string;
-  ticketMate?: CandidateSummary | null;
+  slate?: CandidateSummary[];
 }) {
+  const members = slate ?? [];
   return (
-    <div className={`ballot-share-row${ticketMate ? " has-ticket-mate" : ""}`}>
+    <div className={`ballot-share-row${members.length ? " has-slate" : ""}`}>
+      {members.length > 0 && (
+        <div className="ballot-share-slate" aria-hidden="true">
+          {members.map((member, index) => (
+            <div className="ballot-share-slate-layer" key={member.id} style={{ ["--slate-layer" as string]: index + 1 }}>
+              <CandidatePhoto candidate={member} className="candidate-photo ballot-share-slate-photo" size={56} />
+            </div>
+          ))}
+        </div>
+      )}
       <div className="ballot-share-photo-stack">
-        {ticketMate && (
-          <div className="ballot-share-ticket-mate-wrap" aria-hidden="true">
-            <CandidatePhoto candidate={ticketMate} className="candidate-photo ballot-share-ticket-mate-photo" size={56} />
-          </div>
-        )}
         <CandidatePhoto candidate={candidate} className="candidate-photo ballot-share-head-photo" size={68} />
       </div>
       <div className="ballot-share-main">
@@ -248,11 +276,11 @@ function BallotShareCandidateRow({
 function BallotShareRow({
   office,
   selection,
-  ticketMate,
+  slate,
 }: {
   office: Office;
   selection: OfficeSelection;
-  ticketMate?: CandidateSummary | null;
+  slate?: CandidateSummary[];
 }) {
   const officeLabel = previewOfficeLabel(office.id, office.label);
 
@@ -290,18 +318,18 @@ function BallotShareRow({
       office={office}
       candidate={selection.candidate}
       officeLabel={officeLabel}
-      ticketMate={ticketMate}
+      slate={slate}
     />
   );
 }
 
 function BallotShareSheet({
   selections,
-  ticketMates,
+  ticketSlates,
   duplicateSenator,
 }: {
   selections: Selections;
-  ticketMates: Record<string, CandidateSummary | null>;
+  ticketSlates: Record<string, CandidateSummary[]>;
   duplicateSenator: boolean;
 }) {
   return (
@@ -315,7 +343,7 @@ function BallotShareSheet({
                 key={office.id}
                 office={office}
                 selection={selections[office.id]}
-                ticketMate={ticketMates[office.id]}
+                slate={ticketSlates[office.id]}
               />
             ))}
           </div>
@@ -343,10 +371,7 @@ function SpecialVoteCard({
   isActive?: boolean;
 }) {
   return (
-    <article className={`office-card selected special-vote special-vote-${vote}${isActive ? " is-picking" : ""} has-swap`}>
-      <button className="swap-button swap-button-corner" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
-        <ArrowLeftRight size={16} strokeWidth={2.2} />
-      </button>
+    <article className={`office-card selected special-vote special-vote-${vote}${isActive ? " is-picking" : ""}`}>
       <span className="empty-photo special-vote-photo" aria-hidden="true" />
       <div className="office-card-copy">
         <div className="office-card-heading">
@@ -360,6 +385,9 @@ function SpecialVoteCard({
         </small>
       </div>
       <div className="selected-number">
+        <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
+          <ArrowLeftRight size={16} strokeWidth={2.2} />
+        </button>
         {vote === "branco" ? (
           <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
         ) : (
@@ -373,40 +401,29 @@ function SpecialVoteCard({
 function SelectedOfficeCard({
   office,
   candidate,
-  ticketMate,
+  slate,
   onInspect,
   onSwap,
   isActive,
 }: {
   office: Office;
   candidate: CandidateSummary;
-  ticketMate?: CandidateSummary | null;
+  slate?: CandidateSummary[];
   onInspect?: (candidate: CandidateSummary) => void;
   onSwap?: () => void;
   isActive?: boolean;
 }) {
+  const members = slate ?? [];
   return (
-    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${ticketMate ? " has-ticket-mate" : ""}${onSwap ? " has-swap" : ""}`}>
-      {!office.fixed && onSwap && (
-        <button className="swap-button swap-button-corner" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
-          <ArrowLeftRight size={16} strokeWidth={2.2} />
-        </button>
-      )}
+    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${members.length ? " has-slate" : ""}${onSwap ? " has-swap" : ""}`}>
+      <OfficeCardSlate headOfficeCode={candidate.officeCode} members={members} />
       <button
         type="button"
         className="office-card-body"
         onClick={() => onInspect?.(candidate)}
         aria-label={`Ver informações de ${candidate.ballotName}`}
       >
-        <div className="office-card-photo-stack">
-          {ticketMate && (
-            <div className="ticket-mate-photo-wrap" aria-hidden="true">
-              <CandidatePhoto candidate={ticketMate} className="candidate-photo ticket-mate-photo" size={52} />
-              <span className="ticket-mate-tag">{ticketMateRoleLabel(candidate.officeCode)}</span>
-            </div>
-          )}
-          <CandidatePhoto candidate={candidate} className="candidate-photo ticket-head-photo" />
-        </div>
+        <CandidatePhoto candidate={candidate} />
         <div className="office-card-copy">
           <div className="office-card-heading">
             <span>{office.label}</span>
@@ -419,6 +436,11 @@ function SelectedOfficeCard({
         </div>
       </button>
       <div className="selected-number">
+        {!office.fixed && onSwap && (
+          <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
+            <ArrowLeftRight size={16} strokeWidth={2.2} />
+          </button>
+        )}
         <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
       </div>
     </article>
@@ -454,14 +476,14 @@ function EmptyOfficeSlot({
 function CandidatePicker({
   office,
   selected,
-  ticketMate,
+  slate,
   isActive,
   onOpen,
   onInspect,
 }: {
   office: Office;
   selected: OfficeSelection;
-  ticketMate?: CandidateSummary | null;
+  slate?: CandidateSummary[];
   isActive: boolean;
   onOpen: () => void;
   onInspect: (candidate: CandidateSummary) => void;
@@ -471,7 +493,7 @@ function CandidatePicker({
       <SelectedOfficeCard
         office={office}
         candidate={selected.candidate}
-        ticketMate={ticketMate}
+        slate={slate}
         onInspect={onInspect}
         onSwap={office.fixed ? undefined : onOpen}
         isActive={isActive}
@@ -729,7 +751,7 @@ export function BallotBuilder() {
     () => OFFICES.some((office) => !office.fixed && selections[office.id] !== null),
     [selections],
   );
-  const ticketMates = useTicketMates(selections);
+  const ticketSlates = useTicketSlates(selections);
 
   const pickerOffice = OFFICES.find((office) => office.id === pickerOfficeId) ?? null;
   const showInlinePicker = Boolean(pickerOffice && !mobilePicker);
@@ -905,7 +927,7 @@ export function BallotBuilder() {
                 office={office}
                 key={office.id}
                 selected={selections[office.id]}
-                ticketMate={ticketMates[office.id]}
+                slate={ticketSlates[office.id]}
                 isActive={pickerOfficeId === office.id}
                 onOpen={() => openPicker(office.id)}
                 onInspect={inspectCandidate}
@@ -997,7 +1019,7 @@ export function BallotBuilder() {
       <div ref={shareRef}>
         <BallotShareSheet
           selections={selections}
-          ticketMates={ticketMates}
+          ticketSlates={ticketSlates}
           duplicateSenator={duplicateSenator}
         />
       </div>
