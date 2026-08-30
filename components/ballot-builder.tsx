@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { OFFICES, TERESINHA, type Office } from "@/lib/offices";
+import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
@@ -104,62 +105,86 @@ function NumberBoxes({ number, digits }: { number?: string; digits: number }) {
   );
 }
 
+function PartyBadge({ acronym }: { acronym: string | null | undefined }) {
+  if (!acronym) return null;
+  const style = partyStyleForAcronym(acronym);
+  return (
+    <div className="party-badge">
+      <span className="party-badge-mark" style={{ background: style.background, color: style.color }}>
+        {acronym}
+      </span>
+      <span className="party-badge-label">{acronym}</span>
+    </div>
+  );
+}
+
+function BallotPreviewRow({ office, candidate }: { office: Office; candidate: CandidateSummary | null }) {
+  const officeLabel = previewOfficeLabel(office.id, office.label);
+
+  if (!candidate) {
+    return (
+      <div className="ballot-row ballot-row-empty">
+        <div className="ballot-row-main">
+          <span className="ballot-row-office">{officeLabel}</span>
+          <span className="ballot-blank-pill">BRANCO</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ballot-row">
+      <div className="ballot-row-photo">
+        <CandidatePhoto candidate={candidate} size={68} />
+      </div>
+      <div className="ballot-row-main">
+        <span className="ballot-row-office">{officeLabel}</span>
+        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
+        <strong className="ballot-row-name">{candidate.ballotName}</strong>
+      </div>
+      <div className="ballot-row-party">
+        <PartyBadge acronym={candidate.partyAcronym} />
+      </div>
+    </div>
+  );
+}
+
 function SelectedOfficeCard({
   office,
   candidate,
-  mode = "interactive",
   onInspect,
   onClear,
 }: {
   office: Office;
   candidate: CandidateSummary;
-  mode?: "interactive" | "preview";
   onInspect?: (candidate: CandidateSummary) => void;
   onClear?: () => void;
 }) {
   return (
-    <article className={`office-card selected${office.fixed ? " fixed" : ""}${mode === "preview" ? " preview-card" : ""}`}>
+    <article className={`office-card selected${office.fixed ? " fixed" : ""}`}>
       <CandidatePhoto candidate={candidate} />
       <div className="office-card-copy">
         <div className="office-card-heading">
           <span>{office.label}</span>
-          {office.fixed && mode === "interactive" && (
+          {office.fixed && (
             <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>
           )}
         </div>
         <strong>{candidate.ballotName}</strong>
         <small>{[candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}</small>
-        {mode === "interactive" && onInspect && (
+        {onInspect && (
           <button className="text-button" type="button" onClick={() => onInspect(candidate)}>
             <Info size={14} /> Ver informações
           </button>
         )}
       </div>
       <div className="selected-number">
-        {mode === "interactive" && !office.fixed && onClear && (
+        {!office.fixed && onClear && (
           <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
             <ArrowLeftRight size={16} strokeWidth={2.2} />
           </button>
         )}
         <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
-      </div>
-    </article>
-  );
-}
-
-function EmptyOfficeCard({ office }: { office: Office }) {
-  return (
-    <article className="office-card preview-empty">
-      <span className="empty-photo" aria-hidden="true" />
-      <div className="office-card-copy">
-        <div className="office-card-heading">
-          <span>{office.label}</span>
-        </div>
-        <strong>Escolha seu candidato</strong>
-        <small>{office.digits} dígitos</small>
-      </div>
-      <div className="selected-number">
-        <NumberBoxes digits={office.digits} />
       </div>
     </article>
   );
@@ -638,32 +663,23 @@ export function BallotBuilder() {
             <p>Atualiza conforme você escolhe.</p>
           </div>
           <div className="ballot-frame">
-            <div className="ballot-paper" ref={ballotRef} id="ballot-card">
-              <div className="ballot-header">
-                <div className="paper-brand"><span>✓</span> colinha<span>.2026</span></div>
-                <div>ORDEM DE VOTAÇÃO<br /><strong>SÃO PAULO</strong></div>
+            <div className="ballot-paper ballot-sheet" ref={ballotRef} id="ballot-card">
+              <p className="ballot-sheet-meta">São Paulo · SP</p>
+              <div className="ballot-sheet-rows">
+                {OFFICES.map((office) => (
+                  <BallotPreviewRow
+                    key={office.id}
+                    office={office}
+                    candidate={selections[office.id]}
+                  />
+                ))}
               </div>
-              <p className="paper-instruction">Confira o número e a foto antes de apertar <strong>CONFIRMA</strong>.</p>
-              <div className="office-list ballot-office-list">
-                {OFFICES.map((office) => {
-                  const candidate = selections[office.id];
-                  return candidate ? (
-                    <SelectedOfficeCard
-                      key={office.id}
-                      office={office}
-                      candidate={candidate}
-                      mode="preview"
-                    />
-                  ) : (
-                    <EmptyOfficeCard key={office.id} office={office} />
-                  );
-                })}
-              </div>
-              {duplicateSenator && <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>}
-              <div className="ballot-footer">
-                <span>Gerado em {new Date().toLocaleDateString("pt-BR")}</span>
-                <strong>Leve sua colinha para votar.</strong>
-              </div>
+              {duplicateSenator && (
+                <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
+              )}
+              <p className="ballot-sheet-footer">
+                Monte a sua em <strong>colinha.2026</strong>
+              </p>
             </div>
           </div>
 
