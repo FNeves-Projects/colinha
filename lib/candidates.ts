@@ -1,5 +1,5 @@
 import { getSql, hasDatabase } from "./db";
-import { candidateProposalPublicUrl } from "./candidate-proposal-urls";
+import { resolveStoredProposalUrl } from "./divulga-proposals";
 import { TERESINHA } from "./offices";
 import { normalizeSocialLinks } from "./social-links";
 import { hasTicketSlate, slateMateOfficeCodes, ticketHeadOfficeCode, ticketHeadOfficeCodeFor } from "./ticket-mates";
@@ -96,7 +96,7 @@ async function loadRelated(candidateId: string, options?: { includeProposals?: b
   const proposals = proposalRowsRaw.map((proposal) => ({
     id: proposal.tse_file_id,
     title: proposal.title,
-    url: proposal.local_url || candidateProposalPublicUrl(proposal.tse_file_id),
+    url: resolveStoredProposalUrl(proposal.tse_file_id, proposal.local_url),
   }));
 
   return {

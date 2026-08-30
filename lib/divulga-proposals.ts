@@ -1,3 +1,4 @@
+import { candidateProposalPublicUrl } from "./candidate-proposal-urls";
 import type { CandidateProposal } from "./types";
 
 const DIVULGA_BASE = "https://divulgacandcontas.tse.jus.br/divulga";
@@ -13,6 +14,10 @@ type DivulgaFile = {
 
 export function tseProposalDocumentUrl(idArquivo: number | string) {
   return `${DIVULGA_BASE}/rest/arquivo/doc/${idArquivo}`;
+}
+
+export function resolveStoredProposalUrl(tseFileId: string, localUrl: string | null) {
+  return localUrl || candidateProposalPublicUrl(tseFileId);
 }
 
 export function proposalPdfApiUrl(proposal: Pick<CandidateProposal, "id" | "url">, download = false) {
@@ -58,7 +63,7 @@ export function extractProposalsFromDivulgaFiles(files: DivulgaFile[]): Candidat
       const id = String(file.idArquivo ?? "").trim();
       if (!id || seen.has(id)) return [];
       seen.add(id);
-      return [{ id, title: proposalTitle(file), url: tseProposalDocumentUrl(id) }];
+      return [{ id, title: proposalTitle(file), url: candidateProposalPublicUrl(id) }];
     });
 }
 

@@ -81,9 +81,8 @@ Nationality, birthplace, and proposal PDFs are fetched from DivulgaCand during
 must run on your machine — Vercel/datacenter IPs are often blocked by TSE.
 
 PDFs are saved under `public/candidate-proposals/{tseFileId}.pdf` and metadata
-is stored in Neon (`nationality`, `birthplace`, `candidate_proposals`). PDF files
-stay local (gitignored) — deploy reads metadata from Neon; run sync before deploy
-and copy PDFs to the host only if you need static serving without the TSE proxy.
+is stored in Neon (`nationality`, `birthplace`, `candidate_proposals`). Commit
+the generated PDFs and deploy, same workflow as candidate photos.
 
 ```bash
 npm run db:migrate

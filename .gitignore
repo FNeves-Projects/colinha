@@ -6,5 +6,4 @@ node_modules
 *.log
 .DS_Store
 data/tse-photos/*.zip
-public/candidate-proposals/*.pdf
 tsconfig.tsbuildinfo
