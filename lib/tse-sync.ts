@@ -1,6 +1,7 @@
 import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
-import { CANDIDATE_PHOTO_PUBLIC_PATH, candidatePhotoPublicUrl, syncCandidatePhotos } from "./candidate-photo-sync";
+import { CANDIDATE_PHOTO_PUBLIC_PATH, candidatePhotoPublicUrl } from "./candidate-photo-urls";
+import { syncCandidatePhotos } from "./candidate-photo-sync";
 import { getSql } from "./db";
 import { normalizeSocialLink } from "./social-links";
 import {

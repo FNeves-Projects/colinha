@@ -12,7 +12,8 @@
     "sync:photos": "tsx scripts/sync-photos.ts",
     "photos": "npm run sync:photos",
     "repair:socials": "tsx scripts/repair-social-links.ts",
-    "repair:photos": "tsx scripts/repair-photo-urls.ts"
+    "repair:photos": "tsx scripts/repair-photo-urls.ts",
+    "repair:tse-urls": "tsx scripts/repair-tse-urls.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",

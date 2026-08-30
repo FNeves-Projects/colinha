@@ -1,5 +1,8 @@
+import "server-only";
+
 import fs from "node:fs/promises";
 import path from "node:path";
+import { CANDIDATE_PHOTO_PUBLIC_PATH, candidatePhotoPublicUrl, isLocalCandidatePhotoUrl } from "./candidate-photo-urls";
 import { getSql } from "./db";
 import {
   discoverLocalPhotoZipPaths,
@@ -41,7 +44,6 @@ export type CandidatePhotoSyncOptions = {
   onProgress?: (message: string) => void;
 };
 
-export const CANDIDATE_PHOTO_PUBLIC_PATH = "/candidate-photos";
 export const CANDIDATE_PHOTO_OUTPUT_DIR = path.join(process.cwd(), "public/candidate-photos");
 
 const DEFAULT_PHOTO_SYNC_LIMIT = 200;
@@ -61,14 +63,6 @@ function parsePhotoSyncLimit(fallback: number) {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return Math.floor(parsed);
-}
-
-export function candidatePhotoPublicUrl(sqCandidate: string, extension = "jpg") {
-  return `${CANDIDATE_PHOTO_PUBLIC_PATH}/${sqCandidate}.${extension}`;
-}
-
-export function isLocalCandidatePhotoUrl(value: string | null) {
-  return Boolean(value?.startsWith(`${CANDIDATE_PHOTO_PUBLIC_PATH}/`));
 }
 
 function extensionForContentType(contentType: string) {

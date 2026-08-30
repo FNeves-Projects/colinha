@@ -1,3 +1,5 @@
+import "server-only";
+
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";

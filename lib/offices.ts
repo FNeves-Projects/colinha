@@ -1,4 +1,4 @@
-import { candidatePhotoPublicUrl } from "./candidate-photo-sync";
+import { candidatePhotoPublicUrl } from "./candidate-photo-urls";
 import { TERESINHA_SQ_CANDIDATE, tseCandidateUrl } from "./tse-urls";
 
 export type Office = {
