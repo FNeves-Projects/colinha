@@ -343,7 +343,10 @@ function SpecialVoteCard({
   isActive?: boolean;
 }) {
   return (
-    <article className={`office-card selected special-vote special-vote-${vote}${isActive ? " is-picking" : ""}`}>
+    <article className={`office-card selected special-vote special-vote-${vote}${isActive ? " is-picking" : ""} has-swap`}>
+      <button className="swap-button swap-button-corner" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
+        <ArrowLeftRight size={16} strokeWidth={2.2} />
+      </button>
       <span className="empty-photo special-vote-photo" aria-hidden="true" />
       <div className="office-card-copy">
         <div className="office-card-heading">
@@ -357,9 +360,6 @@ function SpecialVoteCard({
         </small>
       </div>
       <div className="selected-number">
-        <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
-          <ArrowLeftRight size={16} strokeWidth={2.2} />
-        </button>
         {vote === "branco" ? (
           <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
         ) : (
@@ -386,7 +386,12 @@ function SelectedOfficeCard({
   isActive?: boolean;
 }) {
   return (
-    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${ticketMate ? " has-ticket-mate" : ""}`}>
+    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${ticketMate ? " has-ticket-mate" : ""}${onSwap ? " has-swap" : ""}`}>
+      {!office.fixed && onSwap && (
+        <button className="swap-button swap-button-corner" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
+          <ArrowLeftRight size={16} strokeWidth={2.2} />
+        </button>
+      )}
       <button
         type="button"
         className="office-card-body"
@@ -414,11 +419,6 @@ function SelectedOfficeCard({
         </div>
       </button>
       <div className="selected-number">
-        {!office.fixed && onSwap && (
-          <button className="swap-button" type="button" onClick={(event) => { event.stopPropagation(); onSwap(); }} aria-label={`Trocar ${office.label}`}>
-            <ArrowLeftRight size={16} strokeWidth={2.2} />
-          </button>
-        )}
         <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
       </div>
     </article>
