@@ -15,6 +15,7 @@ import {
   Search,
   Share,
   Sun,
+  Users,
   Volume2,
   VolumeX,
   X,
@@ -33,7 +34,7 @@ import {
   type SpecialVoteKind,
 } from "@/lib/ballot-selections";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
-import { previewOfficeLabel } from "@/lib/party-styles";
+import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { fetchTicketChapaForCandidate } from "@/lib/ticket-mate-fetch";
 import { isTicketChapaMember, slateMemberRoleLabel, slateMateRoleLabel, ticketHeadOfficeCodeFor } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
@@ -45,7 +46,9 @@ import { useTicketSlates } from "@/hooks/use-ticket-mates";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
 const PREVIEW_THEME_KEY = "colinha-preview-theme-v1";
+const PREVIEW_VICE_KEY = "colinha-preview-vice-v1";
 const BALLOT_META_LABEL = "Eleições 2026 - São Paulo - SP";
+const PREVIEW_VICE_OFFICE_CODES = new Set([1, 3]);
 const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
 
 function initialSelections(): Selections {
@@ -157,7 +160,7 @@ function PartyBadge({ acronym, variant = "live" }: { acronym: string | null | un
     <div className={`party-badge${variant === "share" ? " party-badge-share" : ""}`}>
       {logoUrl ? (
         <span className="party-badge-logo">
-          <Image src={logoUrl} alt="" width={44} height={44} unoptimized />
+          <Image src={logoUrl} alt="" width={52} height={52} unoptimized />
         </span>
       ) : (
         <span className="party-badge-mark" style={{ background: fallback.background, color: fallback.color }}>
@@ -169,7 +172,33 @@ function PartyBadge({ acronym, variant = "live" }: { acronym: string | null | un
   );
 }
 
-function BallotPreviewRow({ office, selection }: { office: Office; selection: OfficeSelection }) {
+function previewViceCandidate(office: Office, slate?: CandidateSummary[]) {
+  if (!PREVIEW_VICE_OFFICE_CODES.has(office.code) || !slate?.length) return null;
+  return slate[0];
+}
+
+function fixedSlotRowProps(partyAcronym: string | null | undefined) {
+  const style = partyStyleForAcronym(partyAcronym);
+  return {
+    className: " is-fixed-slot",
+    style: {
+      ["--fixed-accent" as string]: style.background,
+      ["--fixed-accent-fg" as string]: style.color,
+    } as React.CSSProperties,
+  };
+}
+
+function BallotPreviewRow({
+  office,
+  selection,
+  showViceOnBallot,
+  slate,
+}: {
+  office: Office;
+  selection: OfficeSelection;
+  showViceOnBallot: boolean;
+  slate?: CandidateSummary[];
+}) {
   const officeLabel = previewOfficeLabel(office.id, office.label);
 
   if (!selection) {
@@ -202,15 +231,32 @@ function BallotPreviewRow({ office, selection }: { office: Office; selection: Of
   }
 
   const candidate = selection.candidate;
+  const vice = showViceOnBallot ? previewViceCandidate(office, slate) : null;
+  const fixedProps = office.fixed ? fixedSlotRowProps(candidate.partyAcronym) : null;
   return (
-    <div className="ballot-row">
-      <div className="ballot-row-photo">
-        <CandidatePhoto candidate={candidate} size={68} />
+    <div className={`ballot-row${fixedProps?.className ?? ""}`} style={fixedProps?.style}>
+      <div className={`ballot-row-photo${vice ? " is-duo" : ""}`}>
+        <div className="ballot-row-photo-main">
+          <CandidatePhoto candidate={candidate} size={68} />
+        </div>
+        {vice ? (
+          <CandidatePhoto candidate={vice} className="candidate-photo ballot-vice-photo" size={52} />
+        ) : null}
       </div>
       <div className="ballot-row-main">
-        <span className="ballot-row-office">{officeLabel}</span>
+        <div className="ballot-row-heading">
+          <span className="ballot-row-office">{officeLabel}</span>
+        </div>
         <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
-        <strong className="ballot-row-name">{candidate.ballotName}</strong>
+        <div className="ballot-row-names">
+          <strong className="ballot-row-name">{candidate.ballotName}</strong>
+          {vice ? (
+            <>
+              <span className="ballot-row-names-divider" aria-hidden="true" />
+              <span className="ballot-row-vice-name">{vice.ballotName}</span>
+            </>
+          ) : null}
+        </div>
       </div>
       <div className="ballot-row-party">
         <PartyBadge acronym={candidate.partyAcronym} variant="live" />
@@ -299,32 +345,41 @@ function BallotShareCandidateRow({
   office,
   candidate,
   officeLabel,
+  showViceOnBallot,
   slate,
 }: {
   office: Office;
   candidate: CandidateSummary;
   officeLabel: string;
+  showViceOnBallot: boolean;
   slate?: CandidateSummary[];
 }) {
-  const members = slate ?? [];
+  const vice = showViceOnBallot ? previewViceCandidate(office, slate) : null;
+  const fixedProps = office.fixed ? fixedSlotRowProps(candidate.partyAcronym) : null;
   return (
-    <div className={`ballot-share-row${members.length ? " has-slate" : ""}`}>
-      {members.length > 0 && (
-        <div className="ballot-share-slate" aria-hidden="true">
-          {members.map((member, index) => (
-            <div className="ballot-share-slate-layer" key={member.id} style={{ ["--slate-layer" as string]: index + 1 }}>
-              <CandidatePhoto candidate={member} className="candidate-photo ballot-share-slate-photo" size={56} />
-            </div>
-          ))}
+    <div className={`ballot-share-row${fixedProps?.className ?? ""}`} style={fixedProps?.style}>
+      <div className={`ballot-share-photo-stack${vice ? " is-duo" : ""}`}>
+        <div className="ballot-share-photo-main">
+          <CandidatePhoto candidate={candidate} className="candidate-photo ballot-share-head-photo" size={68} />
         </div>
-      )}
-      <div className="ballot-share-photo-stack">
-        <CandidatePhoto candidate={candidate} className="candidate-photo ballot-share-head-photo" size={68} />
+        {vice ? (
+          <CandidatePhoto candidate={vice} className="candidate-photo ballot-share-vice-photo" size={52} />
+        ) : null}
       </div>
       <div className="ballot-share-main">
-        <span className="ballot-share-office">{officeLabel}</span>
+        <div className="ballot-row-heading">
+          <span className="ballot-share-office">{officeLabel}</span>
+        </div>
         <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
-        <strong className="ballot-share-name">{candidate.ballotName}</strong>
+        <div className="ballot-row-names">
+          <strong className="ballot-share-name">{candidate.ballotName}</strong>
+          {vice ? (
+            <>
+              <span className="ballot-row-names-divider" aria-hidden="true" />
+              <span className="ballot-row-vice-name ballot-share-vice-name">{vice.ballotName}</span>
+            </>
+          ) : null}
+        </div>
       </div>
       <div className="ballot-share-side">
         <PartyBadge acronym={candidate.partyAcronym} variant="share" />
@@ -336,10 +391,12 @@ function BallotShareCandidateRow({
 function BallotShareRow({
   office,
   selection,
+  showViceOnBallot,
   slate,
 }: {
   office: Office;
   selection: OfficeSelection;
+  showViceOnBallot: boolean;
   slate?: CandidateSummary[];
 }) {
   const officeLabel = previewOfficeLabel(office.id, office.label);
@@ -378,6 +435,7 @@ function BallotShareRow({
       office={office}
       candidate={selection.candidate}
       officeLabel={officeLabel}
+      showViceOnBallot={showViceOnBallot}
       slate={slate}
     />
   );
@@ -387,10 +445,12 @@ function BallotShareSheet({
   selections,
   ticketSlates,
   duplicateSenator,
+  showViceOnBallot,
 }: {
   selections: Selections;
   ticketSlates: Record<string, CandidateSummary[]>;
   duplicateSenator: boolean;
+  showViceOnBallot: boolean;
 }) {
   return (
     <div className="ballot-share-capture" aria-hidden="true">
@@ -403,6 +463,7 @@ function BallotShareSheet({
                 key={office.id}
                 office={office}
                 selection={selections[office.id]}
+                showViceOnBallot={showViceOnBallot}
                 slate={ticketSlates[office.id]}
               />
             ))}
@@ -794,6 +855,7 @@ export function BallotBuilder() {
   const [profile, setProfile] = useState<Candidate | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">("light");
+  const [showViceOnBallot, setShowViceOnBallot] = useState(false);
   const [working, setWorking] = useState<"save" | "share" | "whatsapp" | null>(null);
   const [notice, setNotice] = useState("");
   const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
@@ -831,6 +893,8 @@ export function BallotBuilder() {
       } else if (saved.previewTheme === "light" || saved.previewTheme === "dark") {
         setPreviewTheme(saved.previewTheme);
       }
+      const storedVice = localStorage.getItem(PREVIEW_VICE_KEY);
+      if (storedVice === "1") setShowViceOnBallot(true);
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -907,7 +971,8 @@ export function BallotBuilder() {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ selections, muted }));
     localStorage.setItem(PREVIEW_THEME_KEY, previewTheme);
-  }, [hydrated, muted, previewTheme, selections]);
+    localStorage.setItem(PREVIEW_VICE_KEY, showViceOnBallot ? "1" : "0");
+  }, [hydrated, muted, previewTheme, showViceOnBallot, selections]);
 
   const duplicateSenator = useMemo(() => {
     const first = selections.senador1;
@@ -1202,46 +1267,30 @@ export function BallotBuilder() {
                 <p>Atualiza conforme você escolhe.</p>
               </div>
               <div className={`ballot-frame${previewTheme === "dark" ? " ballot-frame--dark" : ""}`}>
-                {previewTheme === "dark" ? (
-                  <div className="ballot-paper ballot-share-sheet ballot-preview-dark">
-                    <p className="ballot-share-meta">{BALLOT_META_LABEL}</p>
-                    <div className="ballot-share-rows">
-                      {OFFICES.map((office) => (
-                        <BallotShareRow
-                          key={office.id}
-                          office={office}
-                          selection={selections[office.id]}
-                          slate={ticketSlates[office.id]}
-                        />
-                      ))}
-                    </div>
-                    {duplicateSenator && (
-                      <p className="ballot-share-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
-                    )}
-                    <p className="ballot-share-footer">
-                      Monte a sua em <strong>colinha.2026</strong>
-                    </p>
+                <div
+                  className={`ballot-paper ballot-sheet${previewTheme === "dark" ? " ballot-preview-dark" : ""}`}
+                  ref={ballotRef}
+                  id="ballot-card"
+                >
+                  <p className="ballot-sheet-meta">{BALLOT_META_LABEL}</p>
+                  <div className="ballot-sheet-rows">
+                    {OFFICES.map((office) => (
+                      <BallotPreviewRow
+                        key={office.id}
+                        office={office}
+                        selection={selections[office.id]}
+                        showViceOnBallot={showViceOnBallot}
+                        slate={ticketSlates[office.id]}
+                      />
+                    ))}
                   </div>
-                ) : (
-                  <div className="ballot-paper ballot-sheet" ref={ballotRef} id="ballot-card">
-                    <p className="ballot-sheet-meta">{BALLOT_META_LABEL}</p>
-                    <div className="ballot-sheet-rows">
-                      {OFFICES.map((office) => (
-                        <BallotPreviewRow
-                          key={office.id}
-                          office={office}
-                          selection={selections[office.id]}
-                        />
-                      ))}
-                    </div>
-                    {duplicateSenator && (
-                      <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
-                    )}
-                    <p className="ballot-sheet-footer">
-                      Monte a sua em <strong>colinha.2026</strong>
-                    </p>
-                  </div>
-                )}
+                  {duplicateSenator && (
+                    <p className="paper-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
+                  )}
+                  <p className="ballot-sheet-footer">
+                    Monte a sua em <strong>colinha.2026</strong>
+                  </p>
+                </div>
               </div>
 
               <div className="preview-options" role="group" aria-label="Opções da colinha">
@@ -1254,6 +1303,16 @@ export function BallotBuilder() {
                 >
                   {previewTheme === "light" ? <Moon size={18} /> : <Sun size={18} />}
                   <span>{previewTheme === "light" ? "Tema escuro" : "Tema claro"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`preview-option-btn${showViceOnBallot ? " is-active" : ""}`}
+                  aria-pressed={showViceOnBallot}
+                  onClick={() => setShowViceOnBallot((value) => !value)}
+                  aria-label={showViceOnBallot ? "Ocultar vice na colinha" : "Incluir vice na colinha"}
+                >
+                  <Users size={18} />
+                  <span>{showViceOnBallot ? "Sem vice" : "Com vice"}</span>
                 </button>
               </div>
 
@@ -1273,7 +1332,7 @@ export function BallotBuilder() {
                   disabled={working !== null}
                   aria-label="Compartilhar no WhatsApp"
                 >
-                  {working === "whatsapp" ? <span className="button-spinner" /> : <WhatsAppIcon size={22} />}
+                  {working === "whatsapp" ? <span className="button-spinner" /> : <WhatsAppIcon size={26} />}
                 </button>
               </div>
               <button
@@ -1309,6 +1368,7 @@ export function BallotBuilder() {
           selections={selections}
           ticketSlates={ticketSlates}
           duplicateSenator={duplicateSenator}
+          showViceOnBallot={showViceOnBallot}
         />
       </div>
 
