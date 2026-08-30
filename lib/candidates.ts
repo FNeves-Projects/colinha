@@ -1,6 +1,7 @@
 import { getSql, hasDatabase } from "./db";
 import { TERESINHA } from "./offices";
 import { normalizeSocialLinks } from "./social-links";
+import { ticketMateOfficeCode } from "./ticket-mates";
 import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
 import type { Candidate, CandidateSummary, SocialLink } from "./types";
 
@@ -187,6 +188,34 @@ export async function searchCandidates(input: {
   ) as CandidateRow[];
 
   return rows.map((row) => mapRow(row));
+}
+
+export async function getTicketMateForHead(input: {
+  headOfficeCode: number;
+  ballotNumber: string;
+  uf: string;
+  year: number;
+}): Promise<CandidateSummary | null> {
+  const mateOfficeCode = ticketMateOfficeCode(input.headOfficeCode);
+  if (!mateOfficeCode || !hasDatabase()) return null;
+
+  const sql = getSql();
+  const rows = await sql.query(
+    `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
+            ballot_number, ballot_name, full_name, party_acronym, status,
+            birth_date::text, occupation, education, photo_url, tse_url, source,
+            source_updated_at::text
+       FROM candidates
+      WHERE election_year = $1
+        AND uf = $2
+        AND office_code = $3
+        AND ballot_number = $4
+      LIMIT 1`,
+    [input.year, input.uf, mateOfficeCode, input.ballotNumber],
+  ) as CandidateRow[];
+
+  const row = rows[0];
+  return row ? mapRow(row) : null;
 }
 
 export async function getCandidateById(id: string): Promise<Candidate | null> {

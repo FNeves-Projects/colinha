@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useId, useState } from "react";
-import { Filter, Info, Search, X } from "lucide-react";
+import { Filter, Search, X } from "lucide-react";
 import { nullBallotNumber, type SpecialVoteKind } from "@/lib/ballot-selections";
 import type { Office } from "@/lib/offices";
 import type { CandidateSummary } from "@/lib/types";
@@ -91,14 +91,12 @@ export function CandidatePickerPanel({
   onClose,
   onSelect,
   onSelectSpecial,
-  onInspect,
 }: {
   office: Office;
   presentation: "inline" | "modal";
   onClose: () => void;
   onSelect: (candidate: CandidateSummary) => void;
   onSelectSpecial: (vote: SpecialVoteKind) => void;
-  onInspect: (candidate: CandidateSummary) => void;
 }) {
   const partyFilterId = useId();
   const [query, setQuery] = useState("");
@@ -221,28 +219,19 @@ export function CandidatePickerPanel({
 
       <div className="picker-results" role="listbox" aria-label={`Resultados para ${office.label}`}>
         {results.map((candidate) => (
-          <div className="picker-result-row" key={candidate.id}>
-            <button
-              type="button"
-              className="picker-result-main"
-              onClick={() => onSelect(candidate)}
-            >
-              <PickerPhoto candidate={candidate} />
-              <span>
-                <strong>{candidate.ballotName}</strong>
-                <small>{candidate.partyAcronym ?? "Partido não informado"}</small>
-              </span>
-              <b>{candidate.ballotNumber}</b>
-            </button>
-            <button
-              type="button"
-              className="picker-result-info"
-              aria-label={`Ver informações de ${candidate.ballotName}`}
-              onClick={() => onInspect(candidate)}
-            >
-              <Info size={16} />
-            </button>
-          </div>
+          <button
+            type="button"
+            className="picker-result-main"
+            key={candidate.id}
+            onClick={() => onSelect(candidate)}
+          >
+            <PickerPhoto candidate={candidate} />
+            <span>
+              <strong>{candidate.ballotName}</strong>
+              <small>{candidate.partyAcronym ?? "Partido não informado"}</small>
+            </span>
+            <b>{candidate.ballotNumber}</b>
+          </button>
         ))}
         {searched && !loading && results.length === 0 && (
           <p className="picker-empty">Nenhum candidato encontrado nesse cargo.</p>

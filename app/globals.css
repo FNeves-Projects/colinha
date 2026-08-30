@@ -191,6 +191,81 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .empty-photo { display: grid; place-items: center; color: #9aa4b6; }
 .office-card-copy { flex: 1; min-width: 0; }
+.office-card-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.office-card-photo-stack {
+  position: relative;
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+}
+.office-card.has-ticket-mate .office-card-photo-stack {
+  width: 72px;
+}
+.ticket-head-photo {
+  position: relative;
+  z-index: 2;
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+.ticket-mate-photo-wrap {
+  position: absolute;
+  z-index: 1;
+  left: -10px;
+  top: 3px;
+  opacity: 0;
+  transform: translateX(10px) scale(0.94);
+  transition: opacity .22s ease, transform .22s ease;
+  pointer-events: none;
+}
+.ticket-mate-photo {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 11px;
+  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.14);
+}
+.ticket-mate-tag {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.office-card-body:hover .ticket-mate-photo-wrap,
+.office-card-body:focus-visible .ticket-mate-photo-wrap {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+.office-card-body:hover .ticket-head-photo,
+.office-card-body:focus-visible .ticket-head-photo {
+  transform: translateX(12px);
+}
+@media (hover: none) {
+  .office-card.has-ticket-mate .ticket-mate-photo-wrap {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  .office-card.has-ticket-mate .ticket-head-photo {
+    transform: translateX(12px);
+  }
+}
+.office-card.selected .office-card-body:hover .office-card-copy > strong {
+  color: var(--blue-dark);
+}
 .office-card-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; color: var(--blue); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .fixed-label { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border-radius: 999px; background: #dce7ff; color: var(--blue-dark); font-size: 9px; letter-spacing: .03em; }
 .office-card-copy > strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
@@ -600,16 +675,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   flex: 1;
   overflow-y: auto;
   padding: 8px 14px 12px;
-}
-.picker-result-row {
-  display: flex;
-  align-items: stretch;
+  display: grid;
   gap: 6px;
-  margin-bottom: 6px;
 }
 .picker-result-main {
   display: flex;
-  flex: 1;
+  width: 100%;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -637,17 +708,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-family: var(--font-display);
   font-size: 17px;
 }
-.picker-result-info {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: white;
-  color: var(--muted);
-  cursor: pointer;
-}
-.picker-result-info:hover { color: var(--blue); border-color: #c7d2e5; background: #f4f7ff; }
 .picker-empty {
   margin: 0;
   padding: 18px 8px;

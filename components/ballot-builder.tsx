@@ -27,6 +27,7 @@ import {
   type SpecialVoteKind,
 } from "@/lib/ballot-selections";
 import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
+import { hasTicketMate, ticketMateRoleLabel } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateSummary } from "@/lib/types";
@@ -87,7 +88,15 @@ function sanitizeSelections(selections: Selections): Selections {
   );
 }
 
-function CandidatePhoto({ candidate, size = 58 }: { candidate: CandidateSummary; size?: number }) {
+function CandidatePhoto({
+  candidate,
+  size = 58,
+  className = "candidate-photo",
+}: {
+  candidate: CandidateSummary;
+  size?: number;
+  className?: string;
+}) {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -97,7 +106,7 @@ function CandidatePhoto({ candidate, size = 58 }: { candidate: CandidateSummary;
   if (candidate.photoUrl && !imageFailed) {
     return (
       <Image
-        className="candidate-photo"
+        className={className}
         src={candidate.photoUrl}
         alt={`Foto de ${candidate.ballotName}`}
         width={size}
@@ -110,7 +119,7 @@ function CandidatePhoto({ candidate, size = 58 }: { candidate: CandidateSummary;
     );
   }
   return (
-    <span className="candidate-photo candidate-initials" role="img" aria-label={`Iniciais de ${candidate.ballotName}`}>
+    <span className={`${className} candidate-initials`} role="img" aria-label={`Iniciais de ${candidate.ballotName}`}>
       {candidateInitials(candidate)}
     </span>
   );
@@ -244,24 +253,62 @@ function SelectedOfficeCard({
   onSwap?: () => void;
   isActive?: boolean;
 }) {
+  const [ticketMate, setTicketMate] = useState<CandidateSummary | null>(null);
+  const showsTicketMate = hasTicketMate(candidate.officeCode);
+
+  useEffect(() => {
+    if (!showsTicketMate) {
+      setTicketMate(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      ticketMate: "1",
+      headOffice: String(candidate.officeCode),
+      ballot: candidate.ballotNumber,
+      uf: candidate.uf,
+      year: "2026",
+    });
+
+    void fetch(`/api/candidates?${params}`, { signal: controller.signal, cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        setTicketMate(data.ticketMate ? sanitizeCandidateSummary(data.ticketMate as CandidateSummary) : null);
+      })
+      .catch(() => setTicketMate(null));
+
+    return () => controller.abort();
+  }, [candidate.ballotNumber, candidate.officeCode, candidate.uf, showsTicketMate]);
+
   return (
-    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}`}>
-      <CandidatePhoto candidate={candidate} />
-      <div className="office-card-copy">
-        <div className="office-card-heading">
-          <span>{office.label}</span>
-          {office.fixed && (
-            <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>
+    <article className={`office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${ticketMate ? " has-ticket-mate" : ""}`}>
+      <button
+        type="button"
+        className="office-card-body"
+        onClick={() => onInspect?.(candidate)}
+        aria-label={`Ver informações de ${candidate.ballotName}`}
+      >
+        <div className="office-card-photo-stack">
+          {ticketMate && (
+            <div className="ticket-mate-photo-wrap" aria-hidden="true">
+              <CandidatePhoto candidate={ticketMate} className="candidate-photo ticket-mate-photo" size={52} />
+              <span className="ticket-mate-tag">{ticketMateRoleLabel(candidate.officeCode)}</span>
+            </div>
           )}
+          <CandidatePhoto candidate={candidate} className="candidate-photo ticket-head-photo" />
         </div>
-        <strong>{candidate.ballotName}</strong>
-        <small>{[candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}</small>
-        {onInspect && (
-          <button className="text-button" type="button" onClick={() => onInspect(candidate)}>
-            <Info size={14} /> Ver informações
-          </button>
-        )}
-      </div>
+        <div className="office-card-copy">
+          <div className="office-card-heading">
+            <span>{office.label}</span>
+            {office.fixed && (
+              <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>
+            )}
+          </div>
+          <strong>{candidate.ballotName}</strong>
+          <small>{[candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}</small>
+        </div>
+      </button>
       <div className="selected-number">
         {!office.fixed && onSwap && (
           <button className="clear-button" type="button" onClick={onSwap} aria-label={`Trocar ${office.label}`}>
@@ -735,7 +782,6 @@ export function BallotBuilder() {
               onClose={() => setPickerOfficeId(null)}
               onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
               onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
-              onInspect={inspectCandidate}
             />
           ) : (
             <>
@@ -795,7 +841,6 @@ export function BallotBuilder() {
           onClose={() => setPickerOfficeId(null)}
           onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
           onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
-          onInspect={inspectCandidate}
         />
       )}
     </main>
