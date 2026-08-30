@@ -395,7 +395,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   --fan-x: var(--peek-x);
   --fan-a: 1.1deg;
 }
-.office-card-fan--deck:hover {
+.office-card-fan--deck.is-expanded {
   z-index: 5;
   --fan-x: var(--open-x);
   --fan-y: 0px;
@@ -403,6 +403,30 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   --fan-rest-x: 0px;
   --fan-rest-a: 0deg;
   --fan-shadow: 0 0 12px rgba(17, 17, 17, 0.12), 0 18px 36px rgba(17, 17, 17, 0.08);
+}
+@media (hover: hover) and (pointer: fine) {
+  .office-card-fan--deck:hover {
+    z-index: 5;
+    --fan-x: var(--open-x);
+    --fan-y: 0px;
+    --fan-a: 2deg;
+    --fan-rest-x: 0px;
+    --fan-rest-a: 0deg;
+    --fan-shadow: 0 0 12px rgba(17, 17, 17, 0.12), 0 18px 36px rgba(17, 17, 17, 0.08);
+  }
+  .office-card-fan--deck:hover .office-card-fan__card:not([data-rank="0"]) {
+    pointer-events: auto;
+  }
+  .office-card-fan--deck .office-card-fan__card:hover {
+    z-index: 6;
+  }
+  .office-card-fan__pick:hover {
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--blue);
+  }
+}
+.office-card-fan--deck.is-expanded .office-card-fan__card:not([data-rank="0"]) {
+  pointer-events: auto;
 }
 .office-card-fan__card {
   transform-origin: 100% 100%;
@@ -424,9 +448,14 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   inset: 0;
   pointer-events: none;
 }
-.office-card-fan--deck.is-picking .office-card-fan__card:not([data-rank="0"]),
-.office-card-fan--deck:hover .office-card-fan__card:not([data-rank="0"]) {
+.office-card-fan--deck.is-expanded .office-card-fan__card:not([data-rank="0"]) {
   pointer-events: auto;
+}
+@media (hover: hover) and (pointer: fine) {
+  .office-card-fan--deck.is-picking .office-card-fan__card:not([data-rank="0"]),
+  .office-card-fan--deck:hover .office-card-fan__card:not([data-rank="0"]) {
+    pointer-events: auto;
+  }
 }
 .office-card-fan__pick {
   position: absolute;
@@ -437,13 +466,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   background: transparent;
   cursor: pointer;
 }
-.office-card-fan__pick:hover {
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--blue);
-}
-.office-card-fan--deck .office-card-fan__card:hover {
-  z-index: 6;
-}
 .office-card-fan .office-card.selected:hover,
 .office-card-fan .office-card.selected:focus-within {
   transform:
@@ -453,12 +475,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     )
     rotate(calc(var(--fan-i, 0) * var(--fan-a, 0deg) + var(--fan-r, 0) * var(--fan-rest-a, 0deg)));
   box-shadow: var(--fan-shadow);
-}
-@media (hover: none) {
-  .office-card-fan--deck.is-picking {
-    --fan-x: var(--peek-x);
-    --fan-a: 1.1deg;
-  }
 }
 .office-card {
   position: relative;

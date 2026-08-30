@@ -529,10 +529,25 @@ function SelectedOfficeCard({
     [candidate, members, office.label],
   );
   const [activeIndex, setActiveIndex] = useState(0);
+  const [fanExpanded, setFanExpanded] = useState(false);
+  const [canHover, setCanHover] = useState(false);
 
   useEffect(() => {
     setActiveIndex(0);
+    setFanExpanded(false);
   }, [candidate.id, members.map((member) => member.id).join(",")]);
+
+  useEffect(() => {
+    if (isActive) setFanExpanded(false);
+  }, [isActive]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setCanHover(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   const cardClass = (extra = "") =>
     `office-card selected${office.fixed ? " fixed" : ""}${isActive ? " is-picking" : ""}${extra}`;
@@ -540,6 +555,19 @@ function SelectedOfficeCard({
   function focusPerson(index: number) {
     setActiveIndex(index);
     onInspect?.(roster[index].person);
+  }
+
+  function handlePersonAction(index: number) {
+    if (members.length > 0 && !fanExpanded && !canHover) {
+      setFanExpanded(true);
+      return;
+    }
+    focusPerson(index);
+  }
+
+  function handleFrontInspect(selected: CandidateSummary) {
+    const personIndex = roster.findIndex((entry) => entry.person.id === selected.id);
+    handlePersonAction(personIndex >= 0 ? personIndex : 0);
   }
 
   if (!members.length) {
@@ -564,7 +592,7 @@ function SelectedOfficeCard({
   ];
 
   return (
-    <div className={`office-card-fan office-card-fan--deck${isActive ? " is-picking" : ""}`}>
+    <div className={`office-card-fan office-card-fan--deck${isActive ? " is-picking" : ""}${fanExpanded ? " is-expanded" : ""}`}>
       {orderedIndices.map((personIndex, rank) => {
         const entry = roster[personIndex];
         const isFront = rank === 0;
@@ -582,7 +610,7 @@ function SelectedOfficeCard({
               headingLabel={entry.label}
               ballotNumber={candidate.ballotNumber}
               fixed={office.fixed}
-              onInspect={isFront ? onInspect : undefined}
+              onInspect={isFront ? handleFrontInspect : undefined}
               onSwap={isFront && !office.fixed ? onSwap : undefined}
             />
             {!isFront && (
@@ -591,7 +619,7 @@ function SelectedOfficeCard({
                 className="office-card-fan__pick"
                 onClick={(event) => {
                   event.stopPropagation();
-                  focusPerson(personIndex);
+                  handlePersonAction(personIndex);
                 }}
                 aria-label={`Ver ${entry.label} de ${candidate.ballotName}`}
               />
