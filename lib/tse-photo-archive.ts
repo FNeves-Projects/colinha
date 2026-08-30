@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { unzipSync } from "fflate";
 import { fetchTse, TSE_PHOTO_ZIP_TIMEOUT_MS } from "./tse-fetch";
@@ -26,25 +27,157 @@ const DEFAULT_LOCAL_PHOTO_ZIP_NAMES = [
   "foto_cand2026_BR_div.zip",
 ] as const;
 
+const PHOTO_ZIP_URLS_BY_UF = {
+  SP: [
+    "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_SP.zip",
+    "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_SP_div.zip",
+    "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_SP.zip",
+    "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_SP_div.zip",
+  ],
+  BR: [
+    "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_BR.zip",
+    "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_BR_div.zip",
+    "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_BR.zip",
+    "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_BR_div.zip",
+  ],
+} as const;
+
 const DEFAULT_PHOTO_ZIP_URLS = [
-  "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_SP.zip",
-  "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_SP_div.zip",
-  "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_BR.zip",
-  "https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_BR_div.zip",
-  "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_SP.zip",
-  "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_SP_div.zip",
-  "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_BR.zip",
-  "https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_BR_div.zip",
+  ...PHOTO_ZIP_URLS_BY_UF.SP,
+  ...PHOTO_ZIP_URLS_BY_UF.BR,
 ];
 
+export const TSE_PHOTO_DATASET_URL = "https://dadosabertos.tse.jus.br/dataset/candidatos-2026";
+
 export const LOCAL_PHOTO_ZIP_INSTRUCTIONS = [
-  "TSE/Akamai blocks scripted downloads (HTTP 403) even on residential IPs.",
-  "Download the official photo ZIPs in your browser and save them locally:",
-  "  SP: https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_SP.zip",
-  "  BR: https://cdn.tse.jus.br/estatistica/sead/odsele/fotos/foto_cand2026_BR.zip",
-  `Then place the files in ${DEFAULT_LOCAL_PHOTO_ZIP_DIR}/ or pass --zip-file /path/to/file.zip`,
-  "Run: npm run sync:photos",
+  "Automatic download failed. Download photo ZIPs in your browser:",
+  `  ${TSE_PHOTO_DATASET_URL}`,
+  '  Required: "SP - Fotos de candidatos"',
+  '  Optional: "BR - Fotos de candidatos" (president)',
+  `  Save under ${DEFAULT_LOCAL_PHOTO_ZIP_DIR}/ and run npm run sync:photos again.`,
 ].join("\n");
+
+export type EnsurePhotoZipOptions = {
+  directory?: string;
+  ufs?: Array<keyof typeof PHOTO_ZIP_URLS_BY_UF>;
+  forceDownload?: boolean;
+  onProgress?: (message: string) => void;
+};
+
+export type EnsurePhotoZipResult = {
+  zipPaths: string[];
+  downloaded: string[];
+  reused: string[];
+  errors: string[];
+};
+
+function photoZipCachePath(directory: string, uf: keyof typeof PHOTO_ZIP_URLS_BY_UF) {
+  return path.join(directory, `foto_cand2026_${uf}.zip`);
+}
+
+function formatByteSize(size: number) {
+  if (size >= 1024 * 1024) return `${Math.round(size / 1024 / 1024)} MB`;
+  return `${Math.round(size / 1024)} KB`;
+}
+
+function isUsablePhotoZip(filePath: string) {
+  if (!existsSync(filePath)) return false;
+  try {
+    return statSync(filePath).size > 10_000;
+  } catch {
+    return false;
+  }
+}
+
+async function downloadPhotoZipToFile(url: string, destination: string) {
+  const response = await fetchTse(url, TSE_PHOTO_ZIP_TIMEOUT_MS);
+  if (!response.ok) {
+    throw new Error(`${response.status} ${url}`);
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length < 10_000) {
+    throw new Error(`too small (${bytes.length} bytes) ${url}`);
+  }
+
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType.includes("text/html")) {
+    throw new Error(`html response ${url}`);
+  }
+
+  await writeFile(destination, bytes);
+  return bytes.length;
+}
+
+export async function ensureTsePhotoZipFiles(
+  options: EnsurePhotoZipOptions = {},
+): Promise<EnsurePhotoZipResult> {
+  const log = options.onProgress ?? (() => undefined);
+  const directory = path.resolve(
+    options.directory ?? (process.env.TSE_PHOTO_ZIP_DIR?.trim() || DEFAULT_LOCAL_PHOTO_ZIP_DIR),
+  );
+  const ufs = options.ufs ?? ["SP", "BR"];
+  const forceDownload = options.forceDownload ?? false;
+
+  await mkdir(directory, { recursive: true });
+
+  const zipPaths: string[] = [];
+  const downloaded: string[] = [];
+  const reused: string[] = [];
+  const errors: string[] = [];
+
+  for (const uf of ufs) {
+    const destination = photoZipCachePath(directory, uf);
+    const urls = parsePhotoZipUrlsByUf(uf);
+
+    if (!forceDownload && isUsablePhotoZip(destination)) {
+      log(`Using cached ${uf} ZIP: ${destination}`);
+      zipPaths.push(destination);
+      reused.push(destination);
+      continue;
+    }
+
+    let saved = false;
+    for (const url of urls) {
+      try {
+        log(`Downloading ${uf} photos from ${url} ...`);
+        const size = await downloadPhotoZipToFile(url, destination);
+        log(`Saved ${uf} ZIP (${formatByteSize(size)}): ${destination}`);
+        zipPaths.push(destination);
+        downloaded.push(destination);
+        saved = true;
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${uf}: ${message.slice(0, 180)}`);
+      }
+    }
+
+    if (!saved && isUsablePhotoZip(destination)) {
+      log(`Download failed for ${uf}; reusing cached ZIP: ${destination}`);
+      zipPaths.push(destination);
+      reused.push(destination);
+    } else if (!saved && uf === "BR") {
+      log(`BR photo ZIP unavailable (president photos optional).`);
+    } else if (!saved) {
+      log(`Failed to download ${uf} photo ZIP.`);
+    }
+  }
+
+  return { zipPaths, downloaded, reused, errors };
+}
+
+function parsePhotoZipUrlsByUf(uf: keyof typeof PHOTO_ZIP_URLS_BY_UF) {
+  const raw = process.env.TSE_PHOTO_ZIP_URLS?.trim();
+  if (!raw) return [...PHOTO_ZIP_URLS_BY_UF[uf]];
+
+  const configured = raw.split(",").map((url) => url.trim()).filter(Boolean);
+  const forUf = configured.filter((url) => {
+    const match = ufFromPhotoZipUrl(url);
+    return match === uf;
+  });
+  return forUf.length ? forUf : [...PHOTO_ZIP_URLS_BY_UF[uf]];
+}
 
 function parsePhotoZipUrls() {
   const raw = process.env.TSE_PHOTO_ZIP_URLS?.trim();
@@ -52,10 +185,76 @@ function parsePhotoZipUrls() {
   return raw.split(",").map((url) => url.trim()).filter(Boolean);
 }
 
+export function resolveLocalPath(input: string) {
+  const trimmed = input.trim();
+  if (trimmed.startsWith("~/")) {
+    return path.resolve(os.homedir(), trimmed.slice(2));
+  }
+  if (trimmed === "~") {
+    return os.homedir();
+  }
+  return path.resolve(trimmed);
+}
+
+export function resolveLocalPhotoZipPaths(filePaths: string[]) {
+  return filePaths.map(resolveLocalPath);
+}
+
+export function validateLocalPhotoZipPaths(filePaths: string[]) {
+  const resolved = resolveLocalPhotoZipPaths(filePaths);
+  const existing = resolved.filter((filePath) => existsSync(filePath));
+  const missing = resolved.filter((filePath) => !existsSync(filePath));
+
+  if (!existing.length) {
+    throw new Error([
+      "ZIP file(s) not found:",
+      ...missing.map((filePath) => `  - ${filePath}`),
+      "",
+      LOCAL_PHOTO_ZIP_INSTRUCTIONS,
+    ].join("\n"));
+  }
+
+  return { existing, missing };
+}
+
 export function sqFromArchiveEntry(name: string) {
   const base = name.split("/").pop() ?? name;
-  const match = base.match(/^(\d+)\.(jpe?g|png)$/i);
-  return match?.[1] ?? null;
+
+  // Official TSE layout: FSP250002530169_div.jpg / FBR280002551932_div.jpg
+  const tseOfficial = base.match(/^F[A-Z]{2}(\d{10,15})(?:_div)?\.(jpe?g|png)$/i);
+  if (tseOfficial) return tseOfficial[1];
+
+  const direct = base.match(/^(\d{10,15})(?:_div)?\.(jpe?g|png)$/i);
+  if (direct) return direct[1];
+
+  const prefixed = base.match(/(?:^|[_-])(\d{10,15})(?:_div)?\.(jpe?g|png)$/i);
+  if (prefixed) return prefixed[1];
+
+  const digitsOnly = base.match(/^(\d{10,15})$/i);
+  if (digitsOnly) return digitsOnly[1];
+
+  return null;
+}
+
+export function inspectLocalPhotoZip(filePath: string, sampleSize = 8) {
+  const resolved = resolveLocalPath(filePath);
+  if (!existsSync(resolved)) {
+    throw new Error(`ZIP not found: ${resolved}`);
+  }
+
+  const zipBytes = new Uint8Array(readFileSync(resolved));
+  const entries = unzipSync(zipBytes);
+  const imageEntries = Object.keys(entries).filter((name) => /\.(jpe?g|png)$/i.test(name));
+  const sampleNames = imageEntries.slice(0, sampleSize);
+  const sampleSq = sampleNames.map((name) => sqFromArchiveEntry(name)).filter(Boolean);
+
+  return {
+    resolvedPath: resolved,
+    totalEntries: Object.keys(entries).length,
+    imageEntries: imageEntries.length,
+    sampleNames,
+    sampleSq,
+  };
 }
 
 function contentTypeForArchiveEntry(name: string) {
@@ -104,14 +303,18 @@ function extractPhotosFromZip(
 }
 
 export function discoverLocalPhotoZipPaths(explicitPaths: string[] = []) {
-  if (explicitPaths.length) return explicitPaths;
+  if (explicitPaths.length) {
+    return validateLocalPhotoZipPaths(explicitPaths).existing;
+  }
 
   const fromEnv = process.env.TSE_PHOTO_ZIP_FILES?.split(",")
     .map((value) => value.trim())
     .filter(Boolean) ?? [];
-  if (fromEnv.length) return fromEnv;
+  if (fromEnv.length) {
+    return validateLocalPhotoZipPaths(fromEnv).existing;
+  }
 
-  const directory = process.env.TSE_PHOTO_ZIP_DIR?.trim() || DEFAULT_LOCAL_PHOTO_ZIP_DIR;
+  const directory = path.resolve(process.env.TSE_PHOTO_ZIP_DIR?.trim() || DEFAULT_LOCAL_PHOTO_ZIP_DIR);
   return DEFAULT_LOCAL_PHOTO_ZIP_NAMES
     .map((name) => path.join(directory, name))
     .filter((filePath) => existsSync(filePath));
