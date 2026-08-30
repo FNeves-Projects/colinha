@@ -577,6 +577,9 @@ export async function syncTse() {
       photoBlobUploadedCount?: number;
       photoBlobSkippedCount?: number;
       photoBlobFailedCount?: number;
+      photoBlobArchiveZipCount?: number;
+      photoBlobArchivePhotoCount?: number;
+      photoBlobArchiveErrors?: string[];
       photoBlobErrors?: string[];
       snapshotUpdatedAt?: string;
     };
@@ -662,6 +665,9 @@ export async function syncTse() {
         photoBlobUploadedCount: 0,
         photoBlobSkippedCount: 0,
         photoBlobFailedCount: 0,
+        photoBlobArchiveZipCount: 0,
+        photoBlobArchivePhotoCount: 0,
+        photoBlobArchiveErrors: [],
         photoBlobErrors: [message.slice(0, 240)],
       };
     });

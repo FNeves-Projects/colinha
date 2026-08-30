@@ -1,5 +1,7 @@
-import { put } from "@vercel/blob";
+import { put, putImage } from "@vercel/blob";
 import { getSql } from "./db";
+import { loadTsePhotoArchive } from "./tse-photo-archive";
+import { TSE_FETCH_HEADERS } from "./tse-fetch";
 import {
   TSE_CANDIDATE_PHOTO_BASE,
   TSE_ELECTION_ID_2026,
@@ -22,6 +24,9 @@ export type CandidatePhotoBlobSyncResult = {
   photoBlobUploadedCount: number;
   photoBlobSkippedCount: number;
   photoBlobFailedCount: number;
+  photoBlobArchiveZipCount: number;
+  photoBlobArchivePhotoCount: number;
+  photoBlobArchiveErrors: string[];
   photoBlobErrors: string[];
 };
 
@@ -76,7 +81,43 @@ function extensionForContentType(contentType: string) {
   return "jpg";
 }
 
-async function fetchCandidatePhoto(row: CandidatePhotoRow) {
+function blobPathname(row: CandidatePhotoRow, extension: string) {
+  return `candidate-photos/${TSE_ELECTION_ID_2026}/${row.uf}/${row.sq_candidate}.${extension}`;
+}
+
+function toBlobPart(bytes: ArrayBuffer | Uint8Array): BlobPart {
+  if (bytes instanceof Uint8Array) {
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  }
+  return bytes;
+}
+
+async function uploadPhotoBytes(row: CandidatePhotoRow, bytes: ArrayBuffer | Uint8Array, contentType: string) {
+  const extension = extensionForContentType(contentType);
+  const pathname = blobPathname(row, extension);
+  const blob = await put(pathname, new Blob([toBlobPart(bytes)], { type: contentType }), {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: PHOTO_UPLOAD_CACHE_SECONDS,
+    contentType,
+  });
+  return blob.url;
+}
+
+async function uploadPhotoFromUrl(row: CandidatePhotoRow, sourceUrl: string) {
+  const pathname = blobPathname(row, "jpg");
+  const blob = await putImage(pathname, new URL(sourceUrl), {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: PHOTO_UPLOAD_CACHE_SECONDS,
+    optimizeImage: { width: 161, quality: 85, format: "jpeg" },
+  });
+  return blob.url;
+}
+
+async function fetchCandidatePhotoFromUrls(row: CandidatePhotoRow) {
   const uf = row.uf === "BRASIL" ? "BR" : row.uf;
   const urls = uniqueUrls([
     tseCandidatePhotoDownloadUrl(row.sq_candidate, uf),
@@ -88,10 +129,7 @@ async function fetchCandidatePhoto(row: CandidatePhotoRow) {
   for (const url of urls) {
     try {
       const response = await fetch(url, {
-        headers: {
-          Accept: "image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8",
-          "User-Agent": "ColinhaDigital/1.0 (candidate-photo-cache)",
-        },
+        headers: TSE_FETCH_HEADERS,
         signal: AbortSignal.timeout(PHOTO_FETCH_TIMEOUT_MS),
       });
 
@@ -115,22 +153,30 @@ async function fetchCandidatePhoto(row: CandidatePhotoRow) {
     }
   }
 
+  for (const url of urls) {
+    try {
+      return { blobUrl: await uploadPhotoFromUrl(row, url), via: "putImage" as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`putImage ${message.slice(0, 120)} ${url}`);
+    }
+  }
+
   throw new Error(errors.join("; ") || `Unable to fetch photo for ${row.sq_candidate}`);
 }
 
-async function uploadCandidatePhoto(row: CandidatePhotoRow) {
-  const photo = await fetchCandidatePhoto(row);
-  const extension = extensionForContentType(photo.contentType);
-  const pathname = `candidate-photos/${TSE_ELECTION_ID_2026}/${row.uf}/${row.sq_candidate}.${extension}`;
-  const blob = await put(pathname, new Blob([photo.bytes], { type: photo.contentType }), {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    cacheControlMaxAge: PHOTO_UPLOAD_CACHE_SECONDS,
-    contentType: photo.contentType,
-  });
+async function uploadCandidatePhoto(
+  row: CandidatePhotoRow,
+  archive: Map<string, { bytes: Uint8Array; contentType: string }>,
+) {
+  const archived = archive.get(row.sq_candidate);
+  if (archived) {
+    return uploadPhotoBytes(row, archived.bytes, archived.contentType);
+  }
 
-  return blob.url;
+  const fetched = await fetchCandidatePhotoFromUrls(row);
+  if ("blobUrl" in fetched) return fetched.blobUrl;
+  return uploadPhotoBytes(row, fetched.bytes, fetched.contentType);
 }
 
 export async function syncCandidatePhotosToBlob(): Promise<CandidatePhotoBlobSyncResult> {
@@ -142,6 +188,9 @@ export async function syncCandidatePhotosToBlob(): Promise<CandidatePhotoBlobSyn
     photoBlobUploadedCount: 0,
     photoBlobSkippedCount: 0,
     photoBlobFailedCount: 0,
+    photoBlobArchiveZipCount: 0,
+    photoBlobArchivePhotoCount: 0,
+    photoBlobArchiveErrors: [],
     photoBlobErrors: [],
   };
 
@@ -171,15 +220,22 @@ export async function syncCandidatePhotosToBlob(): Promise<CandidatePhotoBlobSyn
   ) as CandidatePhotoRow[];
 
   result.photoBlobScannedCount = rows.length;
+  if (!rows.length) return result;
 
-  for (const row of rows) {
-    if (isPublicBlobUrl(row.photo_url)) {
-      result.photoBlobSkippedCount += 1;
-      continue;
-    }
+  const pendingRows = rows.filter((row) => !isPublicBlobUrl(row.photo_url));
+  result.photoBlobSkippedCount = rows.length - pendingRows.length;
 
+  const archiveLoad = await loadTsePhotoArchive(
+    pendingRows.map((row) => row.sq_candidate),
+    pendingRows.map((row) => row.uf),
+  );
+  result.photoBlobArchiveZipCount = archiveLoad.loadedZipCount;
+  result.photoBlobArchivePhotoCount = archiveLoad.loadedPhotoCount;
+  result.photoBlobArchiveErrors = archiveLoad.errors.slice(0, 4);
+
+  for (const row of pendingRows) {
     try {
-      const blobUrl = await uploadCandidatePhoto(row);
+      const blobUrl = await uploadCandidatePhoto(row, archiveLoad.archive);
       await sql.query(
         `UPDATE candidates SET photo_url = $2, updated_at = now() WHERE id = $1`,
         [row.id, blobUrl],
