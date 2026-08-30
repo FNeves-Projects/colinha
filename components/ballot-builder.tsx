@@ -28,7 +28,6 @@ import {
   selectionNotice,
   selectionPickerLabel,
   selectionRemoveLabel,
-  selectionShareLine,
   type OfficeSelection,
   type Selections,
   type SpecialVoteKind,
@@ -1423,17 +1422,23 @@ export function BallotBuilder() {
     return pdf;
   }
 
-  function buildBallotShareText() {
-    const lines = OFFICES.map((office) => selectionShareLine(office.label, selections[office.id], office.digits));
+  async function shareBallotImage(noticeOnSuccess: string, noticeOnFallback: string) {
+    const capture = await ensureBallotCaptureFile();
 
-    return [
-      "Minha colinha 2026 — São Paulo",
-      "",
-      ...lines,
-      "",
-      "Confira número e foto antes de apertar CONFIRMA.",
-      window.location.origin,
-    ].join("\n");
+    if (typeof navigator.share !== "function") {
+      await downloadPngBlob(capture.dataUrl);
+      setNotice(noticeOnFallback);
+      return;
+    }
+
+    const shared = await shareImageFileOnly(capture.file);
+    if (shared) {
+      setNotice(noticeOnSuccess);
+      return;
+    }
+
+    await downloadPngBlob(capture.dataUrl);
+    setNotice(noticeOnFallback);
   }
 
   async function createPdfFile() {
@@ -1445,19 +1450,34 @@ export function BallotBuilder() {
     };
   }
 
-  async function sharePngFile(shareText: string) {
-    const dataUrl = await captureBallotImage();
-    const file = await createPngFile(dataUrl);
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({
-        files: [file],
-        title: "Minha colinha 2026",
-        text: shareText,
-      });
-      return "shared" as const;
+  async function shareBallot() {
+    setWorking("share");
+    try {
+      await shareBallotImage(
+        "Escolha o app — a imagem vai anexada, sem texto.",
+        "PNG salvo. Anexe o arquivo para enviar.",
+      );
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return;
+      setNotice("Não foi possível compartilhar agora.");
+    } finally {
+      setWorking(null);
     }
-    await downloadPngBlob(dataUrl);
-    return "saved" as const;
+  }
+
+  async function shareBallotOnWhatsApp() {
+    setWorking("whatsapp");
+    try {
+      await shareBallotImage(
+        "Escolha WhatsApp — a imagem vai anexada, sem texto.",
+        "PNG salvo. Abra o WhatsApp e anexe a imagem manualmente.",
+      );
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return;
+      setNotice("Não foi possível compartilhar no WhatsApp agora.");
+    } finally {
+      setWorking(null);
+    }
   }
 
   async function saveBallot() {
@@ -1473,47 +1493,6 @@ export function BallotBuilder() {
     } catch (error) {
       if ((error as Error).name === "AbortError") return;
       setNotice("Não foi possível salvar agora. Tente novamente.");
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function shareBallot() {
-    setWorking("share");
-    try {
-      const result = await sharePngFile(buildBallotShareText());
-      setNotice(result === "shared" ? "Colinha compartilhada." : "PNG salvo. Anexe o arquivo para enviar.");
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setNotice("Não foi possível compartilhar agora. Tente salvar o PNG.");
-      }
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function shareBallotOnWhatsApp() {
-    setWorking("whatsapp");
-    try {
-      const capture = await ensureBallotCaptureFile();
-
-      if (typeof navigator.share !== "function") {
-        await downloadPngBlob(capture.dataUrl);
-        setNotice("PNG salvo. Abra o WhatsApp e anexe a imagem manualmente.");
-        return;
-      }
-
-      const shared = await shareImageFileOnly(capture.file);
-      if (shared) {
-        setNotice("Escolha WhatsApp — a imagem vai anexada, sem texto.");
-        return;
-      }
-
-      await downloadPngBlob(capture.dataUrl);
-      setNotice("PNG salvo. Abra o WhatsApp e anexe a imagem manualmente.");
-    } catch (error) {
-      if ((error as Error).name === "AbortError") return;
-      setNotice("Não foi possível compartilhar no WhatsApp agora.");
     } finally {
       setWorking(null);
     }

@@ -1375,8 +1375,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 @media (max-width: 960px) {
   .action-row-export {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 48px;
+    grid-template-columns: minmax(0, 1fr) 48px;
   }
+  .action-row-export .save-button,
   .channel-button-whatsapp {
     display: none;
   }
@@ -1919,7 +1920,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     min-height: 46px;
   }
   .action-row-export {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 46px;
+    grid-template-columns: minmax(0, 1fr) 46px;
     gap: 6px;
   }
   .action-row-export .save-button,
