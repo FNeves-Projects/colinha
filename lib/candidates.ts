@@ -7,6 +7,7 @@ import {
 } from "./teresinha-slot";
 import { normalizeSocialLinks } from "./social-links";
 import { hasTicketSlate, slateMateOfficeCodes, ticketHeadOfficeCode, ticketHeadOfficeCodeFor } from "./ticket-mates";
+import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
 import type { Candidate, CandidateProposal, CandidateSummary, SocialLink } from "./types";
 
 type CandidateRow = {
@@ -337,6 +338,11 @@ export async function getTicketMateForHead(input: {
 
 export async function getCandidateById(id: string): Promise<Candidate | null> {
   if (!hasDatabase()) return null;
+
+  const lookupKey = id === TERESINHA_ID || id === TERESINHA_SQ_CANDIDATE
+    ? TERESINHA_SQ_CANDIDATE
+    : id;
+
   const sql = getSql();
   const rows = await sql.query(
     `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
@@ -347,7 +353,7 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
        FROM candidates
       WHERE id::text = $1 OR sq_candidate = $1
       LIMIT 1`,
-    [id],
+    [lookupKey],
   ) as CandidateRow[];
   const row = rows[0];
   if (!row) return null;
