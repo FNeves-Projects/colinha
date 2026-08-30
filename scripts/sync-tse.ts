@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-env";
 import { syncTse } from "../lib/tse-sync";
 
 syncTse()

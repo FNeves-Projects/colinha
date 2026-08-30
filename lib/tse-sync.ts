@@ -1,6 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { unzipSync } from "fflate";
-import { syncCandidatePhotosToBlob } from "./candidate-photo-blob";
+import { syncCandidatePhotos } from "./candidate-photo-sync";
 import { getSql } from "./db";
 import { normalizeSocialLink } from "./social-links";
 import {
@@ -236,7 +236,8 @@ async function persistCandidates(normalized: NormalizedCandidate[]) {
         gender = EXCLUDED.gender, race = EXCLUDED.race,
         marital_status = EXCLUDED.marital_status,
         photo_url = CASE
-          WHEN candidates.photo_url LIKE '%public.blob.vercel-storage.com/%' THEN candidates.photo_url
+          WHEN candidates.photo_url LIKE '/candidate-photos/%'
+            OR candidates.photo_url LIKE '%public.blob.vercel-storage.com/%' THEN candidates.photo_url
           ELSE COALESCE(EXCLUDED.photo_url, candidates.photo_url)
         END,
         tse_url = COALESCE(EXCLUDED.tse_url, candidates.tse_url),
@@ -263,6 +264,7 @@ async function backfillCandidatePhotoUrls() {
           OR photo_url LIKE '/assets/%'
           OR (
             photo_url NOT LIKE $1 || '/%'
+            AND photo_url NOT LIKE '/candidate-photos/%'
             AND photo_url NOT LIKE '%public.blob.vercel-storage.com/%'
           )
         )
@@ -301,12 +303,15 @@ async function upsertCandidates(rows: CsvRow[]) {
     }))
     .filter((row) => row.sq_candidate && row.ballot_number && row.ballot_name);
 
-  const blobPhotos = await sql.query(
+  const preservedPhotos = await sql.query(
     `SELECT sq_candidate, photo_url
        FROM candidates
       WHERE election_year = 2026
         AND uf IN ('SP', 'BR')
-        AND photo_url LIKE '%public.blob.vercel-storage.com/%'`,
+        AND (
+          photo_url LIKE '/candidate-photos/%'
+          OR photo_url LIKE '%public.blob.vercel-storage.com/%'
+        )`,
   ) as Array<{ sq_candidate: string; photo_url: string }>;
 
   // The CSV is a complete SP + BR snapshot. Delete only previous TSE rows so
@@ -316,14 +321,14 @@ async function upsertCandidates(rows: CsvRow[]) {
       WHERE election_year = 2026 AND uf IN ('SP', 'BR') AND source = 'TSE'`,
   );
   await persistCandidates(normalized);
-  if (blobPhotos.length) {
+  if (preservedPhotos.length) {
     await sql.query(
       `UPDATE candidates AS c
           SET photo_url = x.photo_url,
               updated_at = now()
          FROM jsonb_to_recordset($1::jsonb) AS x(sq_candidate text, photo_url text)
         WHERE c.sq_candidate = x.sq_candidate`,
-      [JSON.stringify(blobPhotos)],
+      [JSON.stringify(preservedPhotos)],
     );
   }
   return normalized.length;
@@ -571,13 +576,20 @@ export async function syncTse() {
       mirrorCommit?: string;
       mirrorSkipped?: boolean;
       photoBackfillCount?: number;
-      photoBlobEnabled?: boolean;
-      photoBlobLimit?: number;
-      photoBlobScannedCount?: number;
-      photoBlobUploadedCount?: number;
-      photoBlobSkippedCount?: number;
-      photoBlobFailedCount?: number;
-      photoBlobErrors?: string[];
+      photoSyncEnabled?: boolean;
+      photoSyncLimit?: number;
+      photoSyncScannedCount?: number;
+      photoSyncWrittenCount?: number;
+      photoSyncSkippedCount?: number;
+      photoSyncFailedCount?: number;
+      photoSyncArchiveZipCount?: number;
+      photoSyncArchivePhotoCount?: number;
+      photoSyncArchiveErrors?: string[];
+      photoSyncLocalZipPaths?: string[];
+      photoSyncOutputDir?: string;
+      photoSyncErrors?: string[];
+      photoSyncSkippedOnVercel?: boolean;
+      photoSyncHint?: string;
       snapshotUpdatedAt?: string;
     };
     try {
@@ -650,22 +662,24 @@ export async function syncTse() {
       }
     }
     const photoBackfillCount = await backfillCandidatePhotoUrls();
-    const photoBlobDetails = await syncCandidatePhotosToBlob().catch((error) => {
+    const photoSyncDetails = await syncCandidatePhotos().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       return {
-        photoBlobEnabled: Boolean(
-          process.env.BLOB_READ_WRITE_TOKEN
-          || (process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID),
-        ),
-        photoBlobLimit: Number(process.env.CANDIDATE_PHOTO_SYNC_LIMIT ?? 200),
-        photoBlobScannedCount: 0,
-        photoBlobUploadedCount: 0,
-        photoBlobSkippedCount: 0,
-        photoBlobFailedCount: 0,
-        photoBlobErrors: [message.slice(0, 240)],
+        photoSyncEnabled: process.env.VERCEL !== "1",
+        photoSyncLimit: Number(process.env.CANDIDATE_PHOTO_SYNC_LIMIT ?? 200),
+        photoSyncScannedCount: 0,
+        photoSyncWrittenCount: 0,
+        photoSyncSkippedCount: 0,
+        photoSyncFailedCount: 0,
+        photoSyncArchiveZipCount: 0,
+        photoSyncArchivePhotoCount: 0,
+        photoSyncArchiveErrors: [],
+        photoSyncErrors: [message.slice(0, 240)],
+        photoSyncSkippedOnVercel: process.env.VERCEL === "1",
+        photoSyncHint: "Run npm run sync:photos from a local machine with TSE photo ZIPs.",
       };
     });
-    details = { ...details, photoBackfillCount, ...photoBlobDetails };
+    details = { ...details, photoBackfillCount, ...photoSyncDetails };
     await sql.query(
       `UPDATE sync_runs SET status = 'success', finished_at = now(), details = $2::jsonb WHERE id = $1`,
       [runId, JSON.stringify(details)],

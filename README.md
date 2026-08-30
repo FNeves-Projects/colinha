@@ -24,13 +24,14 @@ npm run dev
   DivulgaCand, and a pinned mirror snapshot of the original TSE CSV files.
 - The contingency snapshot is pinned to an auditable commit. It never replaces a
   newer TSE candidate photo already stored in Neon.
-- Candidate photos are first normalized to the TSE image endpoint and can then
-  be copied to Vercel Blob. When `BLOB_READ_WRITE_TOKEN` is configured, each sync
-  uploads a limited batch of photos to public Blob storage and updates
-  `candidates.photo_url` with the Blob URL.
-- `CANDIDATE_PHOTO_SYNC_LIMIT` controls the maximum number of photo uploads per
-  sync run. The default is `200`; set it higher for a one-time backfill or `0` to
-  disable Blob photo syncing while keeping candidate data sync enabled.
+- Candidate photos must be loaded from official TSE photo ZIP files saved locally.
+  Akamai blocks scripted downloads (HTTP 403), and some direct CDN URLs (for example
+  `foto_cand2026_BR.zip` under `odsele/fotos`) return 404.
+- Run `npm run sync:photos` on your machine (not on Vercel). It downloads the
+  official SP/BR photo ZIPs from TSE, extracts JPEGs into `public/candidate-photos/`,
+  and writes `/candidate-photos/{sq}.jpg` into `candidates.photo_url`. Cached ZIPs
+  live in `data/tse-photos/`. Use `--local-only` to skip download, or `--force-download`
+  to refresh the cache. Commit the generated files so Vercel can serve them on deploy.
 - Social links are shown as declared to the Brazilian Electoral Justice system.
 - If TSE changes the file URLs, configure the `TSE_*_URL` variables in Vercel.
 
@@ -40,15 +41,23 @@ npm run dev
 For commercial or campaign production use, choose a plan that fits Vercel's terms
 and increase the cron frequency if needed.
 
-To store candidate photos in Vercel Blob:
+## Candidate photos
 
-1. Create a public Vercel Blob store in the same team as this project.
-2. Connect the Blob store to the `colinha-digital` project.
-3. Confirm that Vercel added `BLOB_READ_WRITE_TOKEN` to the project environment.
-4. Run `/api/sync/tse` manually or wait for the scheduled/post-deploy sync.
+Photos are static files under `public/candidate-photos/` (~15 MB total). No external
+storage or Vercel Blob is required on the Hobby plan.
 
-The database stores only the resulting public Blob URL; image files are not saved
-inside Postgres.
+From your computer:
+
+```bash
+npm run sync:photos
+```
+
+If automatic download fails, download **SP - Fotos de candidatos** from
+https://dadosabertos.tse.jus.br/dataset/candidatos-2026 into `data/tse-photos/`
+and run `npm run sync:photos -- --local-only`.
+
+Then commit `public/candidate-photos/` and deploy. Re-run the command if TSE
+publishes new candidate photos.
 
 ## Post-Deploy Sync
 

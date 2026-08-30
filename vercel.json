@@ -1,9 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["gru1"],
   "crons": [
     {
       "path": "/api/sync/tse",
       "schedule": "0 9 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/sync/tse/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  }
 }
