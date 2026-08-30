@@ -888,6 +888,74 @@ function CandidateProfile({
   );
 }
 
+function BallotPdfModal({
+  url,
+  fileName,
+  onClose,
+}: {
+  url: string;
+  fileName: string;
+  onClose: () => void;
+}) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  function handlePrint() {
+    const frame = frameRef.current;
+    frame?.contentWindow?.focus();
+    frame?.contentWindow?.print();
+  }
+
+  function handleDownload() {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  return (
+    <div className="pdf-preview-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="pdf-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Visualizar PDF da colinha para impressão"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="pdf-preview-head">
+          <h2>Imprimir colinha</h2>
+          <button className="btn-glass btn-glass--icon-sm drawer-close" type="button" onClick={onClose} aria-label="Fechar visualização do PDF">
+            <X size={21} />
+          </button>
+        </div>
+        <div className="pdf-preview-frame-wrap">
+          <iframe ref={frameRef} className="pdf-preview-frame" src={url} title="PDF da colinha para impressão" />
+        </div>
+        <div className="pdf-preview-actions">
+          <button className="btn-glass btn-glass--lg" type="button" onClick={handleDownload}>
+            <Save size={18} strokeWidth={2.2} aria-hidden="true" />
+            Baixar PDF
+          </button>
+          <button className="btn-glass btn-glass--primary btn-glass--lg" type="button" onClick={handlePrint}>
+            <Printer size={18} strokeWidth={2.2} aria-hidden="true" />
+            Imprimir
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function BallotBuilder() {
   const [selections, setSelections] = useState<Selections>(initialSelections);
   const [hydrated, setHydrated] = useState(false);
@@ -897,6 +965,7 @@ export function BallotBuilder() {
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">("light");
   const [showViceOnBallot, setShowViceOnBallot] = useState(false);
   const [working, setWorking] = useState<"save" | "share" | "whatsapp" | "print" | null>(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
   const [mobilePicker, setMobilePicker] = useState(false);
@@ -1141,11 +1210,38 @@ export function BallotBuilder() {
     return `minha-colinha-2026-${new Date().toISOString().slice(0, 10)}.pdf`;
   }
 
-  function downloadPng(dataUrl: string) {
-    const link = document.createElement("a");
-    link.download = pngFileName();
-    link.href = dataUrl;
-    link.click();
+  async function downloadPngBlob(dataUrl: string) {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement("a");
+      link.download = pngFileName();
+      link.href = url;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  function isTouchDevice() {
+    return (
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 0 && !window.matchMedia("(hover: hover) and (pointer: fine)").matches)
+    );
+  }
+
+  async function savePngToDevice(dataUrl: string) {
+    const file = await createPngFile(dataUrl);
+    if (isTouchDevice() && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Minha colinha 2026" });
+      return "shared" as const;
+    }
+    await downloadPngBlob(dataUrl);
+    return "downloaded" as const;
   }
 
   async function createPngFile(dataUrl: string) {
@@ -1162,36 +1258,6 @@ export function BallotBuilder() {
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
       return true;
     } catch {
-      return false;
-    }
-  }
-
-  async function shareImageNative(file: File, options?: { text?: string; title?: string }) {
-    if (typeof navigator.share !== "function") return false;
-
-    const attempts: ShareData[] = [
-      { files: [file], title: options?.title ?? "Minha colinha 2026" },
-      { files: [file] },
-    ];
-    if (options?.text) {
-      attempts.unshift({ files: [file], text: options.text, title: options?.title ?? "Minha colinha 2026" });
-    }
-
-    for (const payload of attempts) {
-      try {
-        if (navigator.canShare && !navigator.canShare(payload)) continue;
-        await navigator.share(payload);
-        return true;
-      } catch (error) {
-        if ((error as Error).name === "AbortError") throw error;
-      }
-    }
-
-    try {
-      await navigator.share({ files: [file], title: options?.title ?? "Minha colinha 2026" });
-      return true;
-    } catch (error) {
-      if ((error as Error).name === "AbortError") throw error;
       return false;
     }
   }
@@ -1248,7 +1314,7 @@ export function BallotBuilder() {
       });
       return "shared" as const;
     }
-    downloadPng(dataUrl);
+    await downloadPngBlob(dataUrl);
     return "saved" as const;
   }
 
@@ -1256,18 +1322,29 @@ export function BallotBuilder() {
     const encoded = encodeURIComponent(text);
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const url = isMobile
-      ? `whatsapp://send?text=${encoded}`
+      ? `https://wa.me/?text=${encoded}`
       : `https://api.whatsapp.com/send?text=${encoded}`;
-    window.location.assign(url);
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
 
   async function saveBallot() {
     setWorking("save");
     try {
       const dataUrl = await captureBallotImage();
-      downloadPng(dataUrl);
-      setNotice("Sua colinha foi salva em PNG.");
-    } catch {
+      const result = await savePngToDevice(dataUrl);
+      setNotice(
+        result === "shared"
+          ? "Escolha \"Salvar imagem\" ou \"Arquivos\" para guardar no aparelho."
+          : "Sua colinha foi salva em PNG.",
+      );
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return;
       setNotice("Não foi possível salvar agora. Tente novamente.");
     } finally {
       setWorking(null);
@@ -1291,31 +1368,23 @@ export function BallotBuilder() {
   async function shareBallotOnWhatsApp() {
     setWorking("whatsapp");
     try {
+      const shareText = buildBallotShareText();
       const dataUrl = await captureBallotImage();
-      const file = await createPngFile(dataUrl);
-      const shared = await shareImageNative(file, {
-        title: "Minha colinha 2026",
-        text: "Minha colinha 2026 — São Paulo",
-      });
+      const copied = await copyImageToClipboard(dataUrl);
 
-      if (shared) {
-        setNotice("Toque em WhatsApp para enviar a imagem.");
-        return;
-      }
+      openWhatsAppShare(
+        copied
+          ? `${shareText}\n\n(Cole a imagem da colinha no chat.)`
+          : shareText,
+      );
 
-      if (await copyImageToClipboard(dataUrl)) {
-        openWhatsAppShare("Minha colinha 2026 — cole a imagem no chat.");
-        setNotice("Imagem copiada. Abra o WhatsApp e cole.");
-        return;
-      }
-
-      downloadPng(dataUrl);
-      openWhatsAppShare("Minha colinha 2026 — anexe a imagem PNG que acabou de baixar.");
-      setNotice("Imagem salva. No WhatsApp, anexe o arquivo.");
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setNotice("Não foi possível compartilhar no WhatsApp agora.");
-      }
+      setNotice(
+        copied
+          ? "WhatsApp aberto. Toque e segure no chat para colar a imagem."
+          : "WhatsApp aberto. Use Salvar PNG se quiser anexar a imagem.",
+      );
+    } catch {
+      setNotice("Não foi possível abrir o WhatsApp agora.");
     } finally {
       setWorking(null);
     }
@@ -1325,13 +1394,23 @@ export function BallotBuilder() {
     setWorking("print");
     try {
       const { pdf } = await createPdfFile();
-      pdf.save(pdfFileName());
-      setNotice("Sua colinha foi salva em PDF.");
+      const url = URL.createObjectURL(pdf.output("blob"));
+      setPdfPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return url;
+      });
     } catch {
-      setNotice("Não foi possível salvar agora. Tente novamente.");
+      setNotice("Não foi possível gerar o PDF agora. Tente novamente.");
     } finally {
       setWorking(null);
     }
+  }
+
+  function closePdfPreview() {
+    setPdfPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
   }
 
   return (
@@ -1493,7 +1572,7 @@ export function BallotBuilder() {
                     onClick={printBallot}
                     disabled={working !== null}
                     aria-busy={working === "print"}
-                    aria-label="Salvar colinha em PDF"
+                    aria-label="Imprimir colinha em PDF"
                   >
                     {working === "print" ? <span className="button-spinner" aria-hidden="true" /> : <Printer size={22} strokeWidth={2.2} aria-hidden="true" />}
                   </button>
@@ -1550,6 +1629,14 @@ export function BallotBuilder() {
           onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
           onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
           onClearCurrent={() => clearOffice(pickerOffice.id)}
+        />
+      )}
+
+      {pdfPreviewUrl && (
+        <BallotPdfModal
+          url={pdfPreviewUrl}
+          fileName={pdfFileName()}
+          onClose={closePdfPreview}
         />
       )}
 
