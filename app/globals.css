@@ -379,20 +379,25 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .office-card-chapa {
   position: relative;
   z-index: 0;
-  margin-inline: -13px;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 .office-card-chapa.is-picking {
   z-index: 5;
 }
 .office-card-chapa-track {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  scroll-padding-inline: 13px;
-  padding: 2px 13px 6px;
+  scroll-padding-inline: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
   touch-action: pan-x;
   scrollbar-width: none;
 }
@@ -400,10 +405,25 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: none;
 }
 .office-card-chapa-slide {
-  flex: 0 0 calc(100% - 26px);
-  scroll-snap-align: center;
+  flex: 0 0 100%;
+  width: 100%;
+  max-width: 100%;
+  scroll-snap-align: start;
   scroll-snap-stop: always;
   min-width: 0;
+  box-sizing: border-box;
+}
+.office-card-chapa-slide.office-card {
+  min-height: 88px;
+  flex-shrink: 0;
+}
+.office-card-chapa-slide.selected:hover,
+.office-card-chapa-slide.selected:focus-within {
+  transform: none;
+  box-shadow: none;
+}
+.office-card-chapa-slide.selected.is-picking {
+  box-shadow: 0 0 0 3px rgba(23, 55, 127, 0.12);
 }
 .office-card-fan {
   position: relative;
@@ -716,6 +736,19 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .ballot-row:last-child { border-bottom: 0; }
 .ballot-row-empty { grid-template-columns: 1fr; justify-items: center; }
 .ballot-row-pending { padding: 8px 0; }
+.ballot-row-pending-photo,
+.ballot-row-special-photo {
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+}
+.ballot-row-special-vote .ballot-row-special-photo {
+  border-style: dashed;
+  background: #f1f3f6;
+}
+.ballot-row-special-vote .ballot-blank-pill-compact {
+  min-width: 96px;
+}
 .ballot-row-photo {
   position: relative;
   display: flex;
@@ -1104,6 +1137,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .02em;
+  text-transform: uppercase;
 }
 .vote-option .number-boxes,
 .vote-option .ballot-blank-pill-compact {
@@ -1227,6 +1261,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .ballot-paper.ballot-preview-dark .ballot-row-special {
   color: rgba(245, 247, 251, 0.72);
+}
+.ballot-paper.ballot-preview-dark .ballot-row-special-vote .ballot-row-special-photo {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
 }
 .ballot-paper.ballot-preview-dark .ballot-row .number-box {
   border-color: rgba(255, 255, 255, 0.72);
@@ -1705,6 +1743,17 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     gap: 6px;
     padding: 10px 0;
   }
+  .preview-panel .ballot-row-pending-photo,
+  .preview-panel .ballot-row-special-photo {
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+  }
+  .preview-panel .ballot-row-special-vote .ballot-blank-pill-compact {
+    min-width: 84px;
+    height: 30px;
+    font-size: 11px;
+  }
   .preview-panel .ballot-row.is-fixed-slot,
   .preview-panel .ballot-share-row.is-fixed-slot {
     margin-inline: 0;
@@ -1789,16 +1838,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .picker-results { padding-inline: 10px; }
   .picker-vote-options { padding: 12px 16px 18px; }
   .empty-slot-button { min-height: 82px; padding: 10px; gap: 10px; }
-  .office-card-chapa {
-    margin-inline: -10px;
-  }
-  .office-card-chapa-track {
-    gap: 8px;
-    scroll-padding-inline: 10px;
-    padding-inline: 10px;
-  }
-  .office-card-chapa-slide {
-    flex-basis: calc(100% - 18px);
+  .office-card-chapa-slide.office-card {
+    min-height: 82px;
   }
   .empty-slot .office-card-copy > .empty-slot-cta,
   .empty-slot .office-card-copy > .empty-slot-hint { display: none; }

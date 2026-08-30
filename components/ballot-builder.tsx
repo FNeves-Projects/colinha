@@ -324,22 +324,33 @@ function BallotPreviewRow({
 
   if (!selection) {
     return (
-      <div className="ballot-row ballot-row-empty ballot-row-pending">
+      <div className="ballot-row ballot-row-pending">
+        <div className="ballot-row-photo">
+          <span className="empty-photo ballot-row-pending-photo" aria-hidden="true" />
+        </div>
         <div className="ballot-row-main">
-          <span className="ballot-row-office">{officeLabel}</span>
+          <div className="ballot-row-heading">
+            <span className="ballot-row-office">{officeLabel}</span>
+          </div>
           <span className="ballot-pending-mark">—</span>
         </div>
+        <div className="ballot-row-party" aria-hidden="true" />
       </div>
     );
   }
 
   if (selection.type === "special") {
     return (
-      <div className="ballot-row ballot-row-empty">
+      <div className="ballot-row ballot-row-special-vote">
+        <div className="ballot-row-photo">
+          <span className="empty-photo special-vote-photo ballot-row-special-photo" aria-hidden="true" />
+        </div>
         <div className="ballot-row-main">
-          <span className="ballot-row-office">{officeLabel}</span>
+          <div className="ballot-row-heading">
+            <span className="ballot-row-office">{officeLabel}</span>
+          </div>
           {selection.vote === "branco" ? (
-            <span className="ballot-blank-pill">BRANCO</span>
+            <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
           ) : (
             <>
               <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
@@ -347,6 +358,7 @@ function BallotPreviewRow({
             </>
           )}
         </div>
+        <div className="ballot-row-party" aria-hidden="true" />
       </div>
     );
   }

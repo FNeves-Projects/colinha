@@ -67,12 +67,12 @@ function VoteOptionButtons({
 }) {
   return (
     <div className="vote-options picker-vote-options">
-      <button type="button" className="btn-glass btn-glass--card btn-glass--card-null vote-option vote-option-null" onClick={() => onSelect("nulo")}>
-        <span className="vote-option-label">Votar nulo</span>
+      <button type="button" className="btn-glass btn-glass--card btn-glass--card-null vote-option vote-option-null" onClick={() => onSelect("nulo")} aria-label="Votar nulo">
+        <span className="vote-option-label">Nulo</span>
         <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
       </button>
-      <button type="button" className="btn-glass btn-glass--card vote-option vote-option-blank" onClick={() => onSelect("branco")}>
-        <span className="vote-option-label">Votar em branco</span>
+      <button type="button" className="btn-glass btn-glass--card vote-option vote-option-blank" onClick={() => onSelect("branco")} aria-label="Votar em branco">
+        <span className="vote-option-label">Branco</span>
         <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
       </button>
     </div>
