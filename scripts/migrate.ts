@@ -4,7 +4,7 @@ import { neon } from "@neondatabase/serverless";
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL nao configurada");
+  if (!connectionString) throw new Error("DATABASE_URL is not configured");
 
   const migration = await readFile(new URL("../sql/001_initial.sql", import.meta.url), "utf8");
   const statements = migration
@@ -17,10 +17,10 @@ async function main() {
     await sql.query(statement);
   }
 
-  console.log(`Migracao concluida: ${statements.length} instrucoes aplicadas.`);
+  console.log(`Migration completed: ${statements.length} statements applied.`);
 }
 
 main().catch((error) => {
-  console.error("Falha na migracao", error);
+  console.error("Migration failed", error);
   process.exitCode = 1;
 });

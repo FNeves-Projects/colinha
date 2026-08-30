@@ -96,17 +96,17 @@ function isRelevantCsv(name: string) {
   const normalized = name.toLowerCase();
   if (!normalized.endsWith(".csv")) return false;
 
-  // Os pacotes trazem um CSV por UF e outro consolidado (BRASIL). Usar SP e BR
-  // evita importar a mesma candidatura duas vezes pelo arquivo consolidado.
+  // The packages include one CSV per state and one consolidated BRASIL file.
+  // Importing only SP and BR avoids duplicated candidates from the full file.
   return /_(sp|br)\.csv$/.test(normalized);
 }
 
 async function downloadCsvRows(url: string): Promise<CsvRow[]> {
   const response = await fetch(url, {
-    headers: { "User-Agent": "ColinhaDigital/1.0 (dados-abertos-tse)" },
+    headers: { "User-Agent": "ColinhaDigital/1.0 (tse-open-data)" },
     signal: AbortSignal.timeout(90_000),
   });
-  if (!response.ok) throw new Error(`TSE respondeu ${response.status} para ${url}`);
+  if (!response.ok) throw new Error(`TSE returned ${response.status} for ${url}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (url.toLowerCase().endsWith(".csv")) {
     const text = new TextDecoder("windows-1252").decode(bytes);
@@ -270,8 +270,8 @@ async function upsertCandidates(rows: CsvRow[]) {
     }))
     .filter((row) => row.sq_candidate && row.ballot_number && row.ballot_name);
 
-  // O CSV é um retrato completo de SP + BR; removemos apenas registros TSE
-  // anteriores para não manter candidaturas retiradas ou duplicadas por fallback.
+  // The CSV is a complete SP + BR snapshot. Delete only previous TSE rows so
+  // withdrawn candidates and fallback duplicates do not remain in the database.
   await sql.query(
     `DELETE FROM candidates
       WHERE election_year = 2026 AND uf IN ('SP', 'BR') AND source = 'TSE'`,
@@ -286,10 +286,10 @@ async function downloadDivulgaCandidates(target: (typeof DIVULGA_TARGETS)[number
     headers: { Accept: "application/json", "User-Agent": "ColinhaDigital/1.0" },
     signal: AbortSignal.timeout(45_000),
   });
-  if (!response.ok) throw new Error(`DivulgaCand respondeu ${response.status} para ${url}`);
+  if (!response.ok) throw new Error(`DivulgaCand returned ${response.status} for ${url}`);
   const payload = await response.json() as { candidatos?: DivulgaCandidate[] } | DivulgaCandidate[];
   const candidates = Array.isArray(payload) ? payload : payload.candidatos;
-  if (!Array.isArray(candidates)) throw new Error(`Lista de candidatos invalida em ${url}`);
+  if (!Array.isArray(candidates)) throw new Error(`Invalid candidate list from ${url}`);
   return candidates;
 }
 
@@ -513,7 +513,7 @@ export async function syncTse() {
   const runId = runRows[0].id;
   try {
     let details: {
-      strategy: "dados-abertos" | "divulga-cand" | "espelho-tse";
+      strategy: "tse-open-data" | "divulga-cand" | "tse-mirror";
       candidateCount: number;
       socialCount: number;
       assetCount: number;
@@ -534,7 +534,7 @@ export async function syncTse() {
       const assetCount = await upsertAssets(
         await downloadCsvRows(process.env.TSE_ASSETS_URL ?? DEFAULT_ASSETS_URL),
       );
-      details = { strategy: "dados-abertos", candidateCount, socialCount, assetCount };
+      details = { strategy: "tse-open-data", candidateCount, socialCount, assetCount };
     } catch (primaryError) {
       const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
       try {
@@ -559,7 +559,7 @@ export async function syncTse() {
           );
           if (shouldSkip && stored) {
             details = {
-              strategy: "espelho-tse",
+              strategy: "tse-mirror",
               candidateCount: stored.candidate_count,
               socialCount: stored.social_count,
               assetCount: stored.asset_count,
@@ -573,7 +573,7 @@ export async function syncTse() {
             const socialGroups = await Promise.all(MIRROR_SOCIAL_URLS.map(downloadCsvRows));
             const assetGroups = await Promise.all(MIRROR_ASSET_URLS.map(downloadCsvRows));
             details = {
-              strategy: "espelho-tse",
+              strategy: "tse-mirror",
               candidateCount: await upsertCandidates(candidateRows),
               socialCount: await upsertSocials(socialGroups.flat()),
               assetCount: await upsertAssets(assetGroups.flat()),
@@ -587,7 +587,7 @@ export async function syncTse() {
         } catch (mirrorError) {
           const mirrorMessage = mirrorError instanceof Error ? mirrorError.message : String(mirrorError);
           throw new Error(
-            `Dados Abertos: ${primaryMessage}; DivulgaCand: ${fallbackMessage}; Espelho: ${mirrorMessage}`,
+            `TSE Open Data: ${primaryMessage}; DivulgaCand: ${fallbackMessage}; TSE mirror: ${mirrorMessage}`,
           );
         }
       }

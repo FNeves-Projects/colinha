@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       const candidate = await getCandidateById(id);
       return candidate
         ? NextResponse.json({ candidate })
-        : NextResponse.json({ error: "Candidato nao encontrado." }, { status: 404 });
+        : NextResponse.json({ error: "Candidate not found." }, { status: 404 });
     }
 
     const params = searchSchema.safeParse({
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       year: request.nextUrl.searchParams.get("year") ?? 2026,
     });
     if (!params.success) {
-      return NextResponse.json({ error: "Busca invalida." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid search." }, { status: 400 });
     }
     const candidates = await searchCandidates({
       query: params.data.q,
@@ -40,6 +40,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ candidates }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("candidate_api_error", error);
-    return NextResponse.json({ error: "Nao foi possivel consultar os candidatos agora." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to search candidates right now." }, { status: 500 });
   }
 }

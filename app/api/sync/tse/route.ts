@@ -8,12 +8,12 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   try {
     return NextResponse.json({ ok: true, ...(await syncTse()) });
   } catch (error) {
     console.error("tse_sync_error", error);
-    return NextResponse.json({ error: "Falha ao sincronizar os dados do TSE." }, { status: 500 });
+    return NextResponse.json({ error: "Failed to sync TSE data." }, { status: 500 });
   }
 }

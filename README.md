@@ -1,33 +1,34 @@
 # Colinha Digital 2026
 
-Aplicacao de campanha para buscar candidatos, salvar uma colinha de voto em PDF
-e compartilhar pelo menu nativo do celular. Teresinha Neves (3088) fica fixa no
-cargo de Deputada Federal; os demais cargos consultam os dados importados do TSE.
+Campaign web app for searching candidates, saving a voting cheat sheet as a PDF,
+and sharing it through the phone's native share menu. Teresinha Neves (3088) is
+fixed in the Federal Deputy slot; all other offices use candidate data imported
+from TSE.
 
-## Desenvolvimento
+## Development
 
-1. Copie `.env.example` para `.env.local` e informe `DATABASE_URL` e `CRON_SECRET`.
-2. Aplique `sql/001_initial.sql` em um Postgres/Neon vazio com `npm run db:migrate`.
-3. Instale e execute:
+1. Copy `.env.example` to `.env.local` and set `DATABASE_URL` and `CRON_SECRET`.
+2. Apply `sql/001_initial.sql` to an empty Postgres/Neon database with `npm run db:migrate`.
+3. Install dependencies and run the dev server:
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Dados
+## Data
 
-- A escolha do eleitor fica somente no `localStorage`.
-- A API recebe apenas o termo de busca.
-- O importador tenta, nesta ordem: ZIP/CSV de Dados Abertos do TSE,
-  DivulgaCand e um snapshot espelhado dos CSVs originais do TSE.
-- O snapshot de contingência está fixado em um commit auditável. Ele nunca
-  substitui uma fotografia do TSE mais recente já armazenada no Neon.
-- Links sociais são exibidos como declarados à Justiça Eleitoral.
-- Se o TSE alterar as URLs, configure as variáveis `TSE_*_URL` na Vercel.
+- Voter selections stay only in `localStorage`.
+- The API receives only the search term.
+- The importer tries these sources in order: TSE Open Data ZIP/CSV files,
+  DivulgaCand, and a pinned mirror snapshot of the original TSE CSV files.
+- The contingency snapshot is pinned to an auditable commit. It never replaces a
+  newer TSE candidate photo already stored in Neon.
+- Social links are shown as declared to the Brazilian Electoral Justice system.
+- If TSE changes the file URLs, configure the `TSE_*_URL` variables in Vercel.
 
 ## Vercel
 
-O `vercel.json` agenda uma sincronizacao diária, compatível com o plano Hobby.
-Em produção comercial/campanha, use um plano compatível com os termos da Vercel
-e ajuste o cron para uma frequência maior se necessário.
+`vercel.json` schedules a daily sync, which is compatible with the Hobby plan.
+For commercial or campaign production use, choose a plan that fits Vercel's terms
+and increase the cron frequency if needed.

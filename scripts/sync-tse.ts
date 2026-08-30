@@ -3,9 +3,9 @@ import { syncTse } from "../lib/tse-sync";
 
 syncTse()
   .then((result) => {
-    console.log("Sincronizacao concluida", result);
+    console.log("Sync completed", result);
   })
   .catch((error) => {
-    console.error("Falha na sincronizacao", error);
+    console.error("Sync failed", error);
     process.exitCode = 1;
   });
