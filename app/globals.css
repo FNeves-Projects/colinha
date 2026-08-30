@@ -386,36 +386,43 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .office-card-chapa.is-picking {
   z-index: 5;
 }
-.office-card-chapa-track {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scroll-padding-inline: 0;
-  padding: 0;
-  margin: 0;
-  width: 100%;
-  max-width: 100%;
-  touch-action: pan-x;
-  scrollbar-width: none;
-}
-.office-card-chapa-track::-webkit-scrollbar {
-  display: none;
-}
 .office-card-chapa-slide {
-  flex: 0 0 100%;
   width: 100%;
   max-width: 100%;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
   min-width: 0;
   box-sizing: border-box;
 }
 .office-card-chapa-slide.office-card {
   min-height: 88px;
   flex-shrink: 0;
+}
+.office-card-chapa-nav {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.office-card-chapa-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #d8deea;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color .2s, background .2s, color .2s, box-shadow .2s;
+}
+.office-card-chapa-tab.is-active {
+  border-color: #94afe8;
+  background: #edf3ff;
+  color: var(--blue-dark);
+  box-shadow: 0 0 0 2px rgba(23, 55, 127, 0.08);
 }
 .office-card-chapa-slide.selected:hover,
 .office-card-chapa-slide.selected:focus-within {
@@ -1931,6 +1938,14 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .empty-slot-button { min-height: 82px; padding: 10px; gap: 10px; }
   .office-card-chapa-slide.office-card {
     min-height: 82px;
+  }
+  .office-card-chapa-nav {
+    gap: 5px;
+    margin-top: 6px;
+  }
+  .office-card-chapa-tab {
+    padding: 6px 7px;
+    font-size: 8px;
   }
   .empty-slot .office-card-copy > .empty-slot-cta,
   .empty-slot .office-card-copy > .empty-slot-hint { display: none; }

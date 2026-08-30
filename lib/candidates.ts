@@ -80,6 +80,26 @@ export async function getLiveTeresinha(): Promise<Candidate> {
   return fromDb ? withFixedSlotIdentity(fromDb) : TERESINHA;
 }
 
+export function candidateProfileLookupId(summary: Pick<CandidateSummary, "id" | "sqCandidate">) {
+  return summary.id === TERESINHA.id || summary.sqCandidate === TERESINHA.sqCandidate
+    ? TERESINHA.id
+    : summary.id;
+}
+
+export function candidateFromSummary(summary: CandidateSummary): Candidate {
+  return {
+    ...summary,
+    electionYear: 2026,
+    birthDate: null,
+    occupation: null,
+    education: null,
+    tseUrl: null,
+    socials: [],
+    assets: [],
+    sourceUpdatedAt: null,
+  };
+}
+
 async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate | null> {
   if (!hasDatabase()) return null;
   const sql = getSql();

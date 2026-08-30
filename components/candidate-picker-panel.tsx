@@ -83,6 +83,7 @@ export function CandidatePickerPanel({
   onSelect,
   onSelectSpecial,
   onClearCurrent,
+  onPrefetch,
 }: {
   office: Office;
   presentation: "inline" | "modal";
@@ -91,6 +92,7 @@ export function CandidatePickerPanel({
   onSelect: (candidate: CandidateSummary) => void;
   onSelectSpecial: (vote: SpecialVoteKind) => void;
   onClearCurrent?: () => void;
+  onPrefetch?: (candidate: CandidateSummary) => void;
 }) {
   const partyFilterId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -248,6 +250,9 @@ export function CandidatePickerPanel({
             type="button"
             className={`btn-glass btn-glass--list picker-result-main${currentCandidate?.id === candidate.id ? " is-current" : ""}`}
             key={candidate.id}
+            onPointerEnter={() => onPrefetch?.(candidate)}
+            onFocus={() => onPrefetch?.(candidate)}
+            onTouchStart={() => onPrefetch?.(candidate)}
             onClick={() => onSelect(candidate)}
           >
             <PickerPhoto candidate={candidate} />

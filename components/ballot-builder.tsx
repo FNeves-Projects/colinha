@@ -33,6 +33,7 @@ import {
   type Selections,
   type SpecialVoteKind,
 } from "@/lib/ballot-selections";
+import { candidateFromSummary, candidateProfileLookupId } from "@/lib/candidates";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
 import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { fetchTicketChapaForCandidate } from "@/lib/ticket-mate-fetch";
@@ -50,6 +51,11 @@ const PREVIEW_VICE_KEY = "colinha-preview-vice-v1";
 const BALLOT_META_LABEL = "Eleições 2026 - São Paulo - SP";
 const PREVIEW_VICE_OFFICE_CODES = new Set([1, 3]);
 const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
+
+function profileDetailValue(value: string | null | undefined, loading: boolean) {
+  if (value) return value;
+  return loading ? "Carregando…" : "Não informada";
+}
 
 function initialSelections(): Selections {
   return Object.fromEntries(
@@ -418,6 +424,7 @@ function OfficeCardFace({
   ballotNumber,
   fixed,
   onInspect,
+  onPrefetch,
   onSwap,
   interactive = true,
 }: {
@@ -427,6 +434,7 @@ function OfficeCardFace({
   ballotNumber: string;
   fixed?: boolean;
   onInspect?: (candidate: CandidateSummary) => void;
+  onPrefetch?: (candidate: CandidateSummary) => void;
   onSwap?: () => void;
   interactive?: boolean;
 }) {
@@ -452,6 +460,7 @@ function OfficeCardFace({
         <button
           type="button"
           className="office-card-body"
+          onPointerDown={() => onPrefetch?.(candidate)}
           onClick={() => onInspect(candidate)}
           aria-label={`Ver informações de ${candidate.ballotName}`}
         >
@@ -526,6 +535,7 @@ function SelectedOfficeCard({
   candidate,
   slate,
   onInspect,
+  onPrefetch,
   onSwap,
   isActive,
 }: {
@@ -533,6 +543,7 @@ function SelectedOfficeCard({
   candidate: CandidateSummary;
   slate?: CandidateSummary[];
   onInspect?: (candidate: CandidateSummary) => void;
+  onPrefetch?: (candidate: CandidateSummary) => void;
   onSwap?: () => void;
   isActive?: boolean;
 }) {
@@ -581,6 +592,7 @@ function SelectedOfficeCard({
           ballotNumber={candidate.ballotNumber}
           fixed={office.fixed}
           onInspect={onInspect}
+          onPrefetch={onPrefetch}
           onSwap={office.fixed ? undefined : onSwap}
         />
       </article>
@@ -588,31 +600,42 @@ function SelectedOfficeCard({
   }
 
   if (!canHover) {
+    const activeEntry = roster[activeIndex] ?? roster[0];
+
     return (
       <div className={`office-card-chapa${isActive ? " is-picking" : ""}`}>
-        <div
-          className="office-card-chapa-track"
-          role="list"
-          aria-label={`Chapa de ${candidate.ballotName}`}
-        >
-          {roster.map((entry, index) => (
-            <article
-              key={entry.person.id}
-              className={cardClass(" office-card-chapa-slide")}
-              role="listitem"
-            >
-              <OfficeCardFace
-                office={office}
-                candidate={entry.person}
-                headingLabel={entry.label}
-                ballotNumber={candidate.ballotNumber}
-                fixed={office.fixed}
-                onInspect={onInspect}
-                onSwap={index === 0 && !office.fixed ? onSwap : undefined}
-              />
-            </article>
-          ))}
-        </div>
+        <article className={cardClass(" office-card-chapa-slide")}>
+          <OfficeCardFace
+            office={office}
+            candidate={activeEntry.person}
+            headingLabel={activeEntry.label}
+            ballotNumber={candidate.ballotNumber}
+            fixed={office.fixed}
+            onInspect={onInspect}
+            onPrefetch={onPrefetch}
+            onSwap={activeIndex === 0 && !office.fixed ? onSwap : undefined}
+          />
+        </article>
+        {roster.length > 1 && (
+          <div className="office-card-chapa-nav" role="tablist" aria-label={`Membros da chapa de ${candidate.ballotName}`}>
+            {roster.map((entry, index) => (
+              <button
+                key={entry.person.id}
+                type="button"
+                role="tab"
+                className={`office-card-chapa-tab${index === activeIndex ? " is-active" : ""}`}
+                aria-selected={index === activeIndex}
+                aria-label={`Ver ${entry.label}: ${entry.person.ballotName}`}
+                onClick={() => {
+                  setActiveIndex(index);
+                  onPrefetch?.(entry.person);
+                }}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -642,12 +665,14 @@ function SelectedOfficeCard({
               ballotNumber={candidate.ballotNumber}
               fixed={office.fixed}
               onInspect={isFront ? onInspect : undefined}
+              onPrefetch={onPrefetch}
               onSwap={isFront && !office.fixed ? onSwap : undefined}
             />
             {!isFront && (
               <button
                 type="button"
                 className="office-card-fan__pick"
+                onPointerDown={() => onPrefetch?.(entry.person)}
                 onClick={(event) => {
                   event.stopPropagation();
                   focusPerson(personIndex);
@@ -702,6 +727,7 @@ function CandidatePicker({
   isActive,
   onOpen,
   onInspect,
+  onPrefetch,
 }: {
   office: Office;
   selected: OfficeSelection;
@@ -709,6 +735,7 @@ function CandidatePicker({
   isActive: boolean;
   onOpen: () => void;
   onInspect: (candidate: CandidateSummary) => void;
+  onPrefetch: (candidate: CandidateSummary) => void;
 }) {
   if (selected?.type === "candidate") {
     return (
@@ -717,6 +744,7 @@ function CandidatePicker({
         candidate={selected.candidate}
         slate={slate}
         onInspect={onInspect}
+        onPrefetch={onPrefetch}
         onSwap={office.fixed ? undefined : onOpen}
         isActive={isActive}
       />
@@ -741,10 +769,14 @@ function CandidatePicker({
 
 function ProfileContent({
   candidate,
+  detailsLoading = false,
   onInspectMate,
+  onPrefetchMate,
 }: {
   candidate: Candidate;
+  detailsLoading?: boolean;
   onInspectMate?: (candidate: CandidateSummary) => void;
+  onPrefetchMate?: (candidate: CandidateSummary) => void;
 }) {
   const [ticketSlate, setTicketSlate] = useState<CandidateSummary[]>([]);
   const age = candidate.birthDate
@@ -790,9 +822,9 @@ function ProfileContent({
       <section className="profile-section">
         <h3>Candidatura</h3>
         <div className="facts-grid">
-          <div><span>Situação</span><strong>{candidate.status ?? "Não informada"}</strong></div>
-          <div><span>Ocupação</span><strong>{candidate.occupation ?? "Não informada"}</strong></div>
-          <div><span>Escolaridade</span><strong>{candidate.education ?? "Não informada"}</strong></div>
+          <div><span>Situação</span><strong>{profileDetailValue(candidate.status, detailsLoading)}</strong></div>
+          <div><span>Ocupação</span><strong>{profileDetailValue(candidate.occupation, detailsLoading)}</strong></div>
+          <div><span>Escolaridade</span><strong>{profileDetailValue(candidate.education, detailsLoading)}</strong></div>
           <div><span>Fonte</span><strong>{candidate.source}</strong></div>
         </div>
         {ticketSlate.length > 0 && ticketHeadOfficeCode !== null && (
@@ -804,6 +836,7 @@ function ProfileContent({
                   <button
                     type="button"
                     className="btn-glass btn-glass--list profile-slate-card"
+                    onPointerDown={() => onPrefetchMate?.(mate)}
                     onClick={() => onInspectMate?.(mate)}
                     aria-label={`Ver informações de ${mate.ballotName}`}
                   >
@@ -847,13 +880,17 @@ function ProfileContent({
 function CandidateProfile({
   candidate,
   presentation,
+  detailsLoading = false,
   onClose,
   onInspectMate,
+  onPrefetchMate,
 }: {
   candidate: Candidate;
   presentation: "inline" | "modal";
+  detailsLoading?: boolean;
   onClose: () => void;
   onInspectMate?: (candidate: CandidateSummary) => void;
+  onPrefetchMate?: (candidate: CandidateSummary) => void;
 }) {
   if (presentation === "modal") {
     return (
@@ -868,7 +905,12 @@ function CandidateProfile({
           <button className="btn-glass btn-glass--icon-sm drawer-close" type="button" onClick={onClose} aria-label="Fechar informações">
             <X size={21} />
           </button>
-          <ProfileContent candidate={candidate} onInspectMate={onInspectMate} />
+          <ProfileContent
+            candidate={candidate}
+            detailsLoading={detailsLoading}
+            onInspectMate={onInspectMate}
+            onPrefetchMate={onPrefetchMate}
+          />
         </aside>
       </div>
     );
@@ -883,7 +925,12 @@ function CandidateProfile({
       <button className="btn-glass btn-glass--icon-sm profile-panel-close" type="button" onClick={onClose} aria-label="Fechar informações">
         <X size={20} />
       </button>
-      <ProfileContent candidate={candidate} onInspectMate={onInspectMate} />
+      <ProfileContent
+        candidate={candidate}
+        detailsLoading={detailsLoading}
+        onInspectMate={onInspectMate}
+        onPrefetchMate={onPrefetchMate}
+      />
     </section>
   );
 }
@@ -961,7 +1008,7 @@ export function BallotBuilder() {
   const [hydrated, setHydrated] = useState(false);
   const [muted, setMuted] = useState(false);
   const [profile, setProfile] = useState<Candidate | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileDetailsLoading, setProfileDetailsLoading] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">("light");
   const [showViceOnBallot, setShowViceOnBallot] = useState(false);
   const [working, setWorking] = useState<"save" | "share" | "whatsapp" | "print" | null>(null);
@@ -971,6 +1018,8 @@ export function BallotBuilder() {
   const [mobilePicker, setMobilePicker] = useState(false);
   const ballotRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLDivElement>(null);
+  const profileCacheRef = useRef(new Map<string, Candidate>());
+  const profileRequestsRef = useRef(new Map<string, Promise<Candidate | null>>());
   const refreshedSavedSelections = useRef(false);
   const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
@@ -1032,6 +1081,8 @@ export function BallotBuilder() {
           });
           const data = await response.json();
           if (!response.ok || !data.candidate) return null;
+
+          profileCacheRef.current.set(lookupId, data.candidate as Candidate);
 
           return {
             officeId: office.id,
@@ -1110,6 +1161,7 @@ export function BallotBuilder() {
       [office.id]: { type: "candidate", candidate: cleanCandidate },
     }));
     setPickerOfficeId(null);
+    prefetchCandidateProfile(cleanCandidate);
     setNotice(`${candidate.ballotName} foi adicionado à sua colinha.`);
     playConfirmation();
   }
@@ -1160,20 +1212,62 @@ export function BallotBuilder() {
     };
   }, [profile, mobilePicker]);
 
-  async function inspectCandidate(candidate: CandidateSummary) {
-    setPickerOfficeId(null);
-    setProfileLoading(true);
-    try {
-      const lookupId = candidate.id === TERESINHA.id || candidate.sqCandidate === TERESINHA.sqCandidate
-        ? TERESINHA.id
-        : candidate.id;
-      const response = await fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, { cache: "no-store" });
-      const data = await response.json() as { candidate?: Candidate };
-      if (response.ok && data.candidate) setProfile(data.candidate);
-    } finally {
-      setProfileLoading(false);
-    }
+  async function loadCandidateProfile(candidate: CandidateSummary) {
+    const lookupId = candidateProfileLookupId(candidate);
+    const cached = profileCacheRef.current.get(lookupId);
+    if (cached) return cached;
+
+    const pending = profileRequestsRef.current.get(lookupId);
+    if (pending) return pending;
+
+    const request = fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json() as { candidate?: Candidate };
+        if (!response.ok || !data.candidate) return null;
+        profileCacheRef.current.set(lookupId, data.candidate);
+        return data.candidate;
+      })
+      .catch(() => null)
+      .finally(() => {
+        profileRequestsRef.current.delete(lookupId);
+      });
+
+    profileRequestsRef.current.set(lookupId, request);
+    return request;
   }
+
+  function prefetchCandidateProfile(candidate: CandidateSummary) {
+    void loadCandidateProfile(candidate);
+  }
+
+  function inspectCandidate(candidate: CandidateSummary) {
+    setPickerOfficeId(null);
+    const lookupId = candidateProfileLookupId(candidate);
+    const cached = profileCacheRef.current.get(lookupId);
+    setProfile(cached ?? candidateFromSummary(candidate));
+    setProfileDetailsLoading(!cached);
+
+    void loadCandidateProfile(candidate).then((fullCandidate) => {
+      if (fullCandidate) {
+        setProfile((current) => {
+          if (!current || candidateProfileLookupId(current) !== lookupId) return current;
+          return fullCandidate;
+        });
+      }
+      setProfileDetailsLoading(false);
+    });
+  }
+
+  useEffect(() => {
+    if (!hydrated) return;
+    for (const office of OFFICES) {
+      const candidate = selectionCandidate(selections[office.id]);
+      if (candidate) prefetchCandidateProfile(candidate);
+    }
+    for (const slate of Object.values(ticketSlates)) {
+      for (const member of slate) prefetchCandidateProfile(member);
+    }
+  }, [hydrated, selections, ticketSlates]);
 
   async function captureBallotImage() {
     const captureNode = captureRef.current;
@@ -1463,6 +1557,7 @@ export function BallotBuilder() {
                 isActive={pickerOfficeId === office.id}
                 onOpen={() => openPicker(office.id)}
                 onInspect={inspectCandidate}
+                onPrefetch={prefetchCandidateProfile}
               />
             ))}
           </div>
@@ -1473,7 +1568,6 @@ export function BallotBuilder() {
               <span><strong>Atenção:</strong> os dois votos para senador precisam ser diferentes. Se repetir o número, o segundo voto será anulado.</span>
             </div>
           )}
-          {profileLoading && mobilePicker && <p className="loading-profile">Carregando informações do candidato…</p>}
           <p className="notice builder-notice" aria-live="polite">{notice}</p>
         </section>
 
@@ -1482,8 +1576,10 @@ export function BallotBuilder() {
             <CandidateProfile
               candidate={profile}
               presentation="inline"
+              detailsLoading={profileDetailsLoading}
               onClose={() => setProfile(null)}
               onInspectMate={inspectCandidate}
+              onPrefetchMate={prefetchCandidateProfile}
             />
           ) : showInlinePicker && pickerOffice ? (
             <CandidatePickerPanel
@@ -1494,9 +1590,8 @@ export function BallotBuilder() {
               onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
               onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
               onClearCurrent={() => clearOffice(pickerOffice.id)}
+              onPrefetch={prefetchCandidateProfile}
             />
-          ) : profileLoading && !mobilePicker ? (
-            <p className="profile-panel-loading">Carregando informações do candidato…</p>
           ) : (
             <>
               <div className="section-heading preview-heading">
@@ -1615,8 +1710,10 @@ export function BallotBuilder() {
         <CandidateProfile
           candidate={profile}
           presentation="modal"
+          detailsLoading={profileDetailsLoading}
           onClose={() => setProfile(null)}
           onInspectMate={inspectCandidate}
+          onPrefetchMate={prefetchCandidateProfile}
         />
       )}
 
@@ -1629,6 +1726,7 @@ export function BallotBuilder() {
           onSelect={(candidate) => selectCandidate(pickerOffice, candidate)}
           onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
           onClearCurrent={() => clearOffice(pickerOffice.id)}
+          onPrefetch={prefetchCandidateProfile}
         />
       )}
 
