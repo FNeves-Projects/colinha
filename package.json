@@ -1,0 +1,33 @@
+{
+  "name": "colinha-digital",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "sync:tse": "tsx scripts/sync-tse.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.1.0",
+    "csv-parse": "6.1.0",
+    "dotenv": "^17.2.2",
+    "fflate": "0.8.2",
+    "html-to-image": "1.11.13",
+    "jspdf": "4.2.1",
+    "lucide-react": "1.37.0",
+    "next": "16.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}
