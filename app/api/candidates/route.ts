@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getCandidateProposals } from "@/lib/candidate-proposals";
 import { getCandidateById, getTicketChapaForCandidate, getTicketSlateForHead, listPartiesForOffice, searchCandidates } from "@/lib/candidates";
 
 export const runtime = "nodejs";
@@ -31,6 +32,11 @@ const ticketChapaSchema = z.object({
   year: z.coerce.number().int().min(2026).max(2030).default(2026),
 });
 
+const proposalsSchema = z.object({
+  sqCandidate: z.string().trim().min(1).max(20),
+  uf: z.string().trim().transform((value) => (value === "BRASIL" ? "BR" : value)).pipe(z.enum(["SP", "BR"])),
+});
+
 export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   try {
@@ -39,6 +45,21 @@ export async function GET(request: NextRequest) {
       return candidate
         ? NextResponse.json({ candidate })
         : NextResponse.json({ error: "Candidate not found." }, { status: 404 });
+    }
+
+    if (request.nextUrl.searchParams.get("proposals") === "1") {
+      const params = proposalsSchema.safeParse({
+        sqCandidate: request.nextUrl.searchParams.get("sqCandidate"),
+        uf: request.nextUrl.searchParams.get("uf"),
+      });
+      if (!params.success) {
+        return NextResponse.json({ error: "Invalid proposal lookup." }, { status: 400 });
+      }
+      const proposals = await getCandidateProposals({
+        sqCandidate: params.data.sqCandidate,
+        uf: params.data.uf,
+      });
+      return NextResponse.json({ proposals }, { headers: { "Cache-Control": "public, max-age=3600" } });
     }
 
     if (request.nextUrl.searchParams.get("ticketChapa") === "1") {

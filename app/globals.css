@@ -1740,6 +1740,21 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   color: var(--ink);
 }
 .social-links svg { flex-shrink: 0; }
+.profile-proposals-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.profile-proposals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.profile-proposals-list a {
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--ink);
+}
 .tse-link {
   display: flex;
   align-items: center;

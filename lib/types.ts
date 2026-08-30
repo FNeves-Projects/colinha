@@ -10,6 +10,12 @@ export type DeclaredAsset = {
   value: number;
 };
 
+export type CandidateProposal = {
+  id: string;
+  title: string;
+  url: string;
+};
+
 export type Candidate = {
   id: string;
   sqCandidate: string;

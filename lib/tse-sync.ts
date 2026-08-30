@@ -26,6 +26,8 @@ type DivulgaCandidate = {
   descricaoCargo?: string;
   descricaoSituacao?: string;
   situacaoCandidato?: string;
+  descricaoSituacaoCandidato?: string;
+  descricaoTotalizacao?: string;
   dataDeNascimento?: string | number;
   grauInstrucao?: string;
   ocupacao?: string;
@@ -349,6 +351,82 @@ async function downloadDivulgaCandidates(target: (typeof DIVULGA_TARGETS)[number
   return candidates;
 }
 
+type DivulgaCandidatePatch = {
+  sq_candidate: string;
+  status: string | null;
+  status_detail: string | null;
+  occupation: string | null;
+  education: string | null;
+  gender: string | null;
+  race: string | null;
+  marital_status: string | null;
+  birth_date: string | null;
+};
+
+function divulgaCandidatePatch(row: DivulgaCandidate): DivulgaCandidatePatch | null {
+  const sqCandidate = String(row.id ?? row.sqCandidato ?? "").trim();
+  if (!sqCandidate) return null;
+
+  return {
+    sq_candidate: sqCandidate,
+    status: row.descricaoSituacao?.trim() || row.situacaoCandidato?.trim() || null,
+    status_detail: row.descricaoSituacaoCandidato?.trim() || row.descricaoTotalizacao?.trim() || null,
+    occupation: row.ocupacao?.trim() || null,
+    education: row.grauInstrucao?.trim() || null,
+    gender: row.descricaoSexo?.trim() || null,
+    race: row.descricaoCorRaca?.trim() || null,
+    marital_status: row.descricaoEstadoCivil?.trim() || null,
+    birth_date: divulgaDate(row.dataDeNascimento),
+  };
+}
+
+/** Fill live DivulgaCand fields missing from TSE Open Data CSV (#NE placeholders). */
+export async function enrichCandidatesFromDivulgaCand() {
+  const sql = getSql();
+  const patches: DivulgaCandidatePatch[] = [];
+
+  for (const target of DIVULGA_TARGETS) {
+    const rows = await downloadDivulgaCandidates(target);
+    for (const row of rows) {
+      const patch = divulgaCandidatePatch(row);
+      if (patch) patches.push(patch);
+    }
+  }
+
+  for (let index = 0; index < patches.length; index += 500) {
+    const batch = patches.slice(index, index + 500);
+    await sql.query(
+      `UPDATE candidates AS c
+          SET status = COALESCE(x.status, c.status),
+              status_detail = COALESCE(x.status_detail, c.status_detail),
+              occupation = COALESCE(c.occupation, x.occupation),
+              education = COALESCE(c.education, x.education),
+              gender = COALESCE(c.gender, x.gender),
+              race = COALESCE(c.race, x.race),
+              marital_status = COALESCE(c.marital_status, x.marital_status),
+              birth_date = COALESCE(c.birth_date, x.birth_date::date),
+              updated_at = now()
+         FROM jsonb_to_recordset($1::jsonb) AS x(
+           sq_candidate text,
+           status text,
+           status_detail text,
+           occupation text,
+           education text,
+           gender text,
+           race text,
+           marital_status text,
+           birth_date text
+         )
+        WHERE c.sq_candidate = x.sq_candidate
+          AND c.election_year = 2026
+          AND c.uf IN ('SP', 'BR')`,
+      [JSON.stringify(batch)],
+    );
+  }
+
+  return patches.length;
+}
+
 async function syncDivulgaCand() {
   const sql = getSql();
   let candidateCount = 0;
@@ -377,7 +455,7 @@ async function syncDivulgaCand() {
           ? row.numeroPartido == null ? null : String(row.numeroPartido)
           : String(row.partido.numero),
         status: row.descricaoSituacao?.trim() || row.situacaoCandidato?.trim() || null,
-        status_detail: null,
+        status_detail: row.descricaoSituacaoCandidato?.trim() || row.descricaoTotalizacao?.trim() || null,
         birth_date: divulgaDate(row.dataDeNascimento),
         occupation: row.ocupacao?.trim() || null,
         education: row.grauInstrucao?.trim() || null,
@@ -561,7 +639,7 @@ async function upsertAssets(rows: CsvRow[]) {
   return counts[0]?.count ?? 0;
 }
 
-export async function syncTse() {
+export async function syncTse(options?: { skipPhotos?: boolean }) {
   const sql = getSql();
   const runRows = await sql.query(
     `INSERT INTO sync_runs (source, status) VALUES ('TSE', 'running') RETURNING id::text`,
@@ -573,6 +651,7 @@ export async function syncTse() {
       candidateCount: number;
       socialCount: number;
       assetCount: number;
+      divulgaEnrichCount?: number;
       primaryError?: string;
       secondaryError?: string;
       mirrorCommit?: string;
@@ -663,8 +742,26 @@ export async function syncTse() {
         }
       }
     }
+    if (details.strategy === "tse-open-data" || details.strategy === "tse-mirror") {
+      details.divulgaEnrichCount = await enrichCandidatesFromDivulgaCand();
+    }
     const photoBackfillCount = await backfillCandidatePhotoUrls();
-    const photoSyncDetails = await syncCandidatePhotos().catch((error) => {
+    const photoSyncDetails = options?.skipPhotos
+      ? {
+          photoSyncEnabled: false,
+          photoSyncLimit: 0,
+          photoSyncScannedCount: 0,
+          photoSyncWrittenCount: 0,
+          photoSyncSkippedCount: 0,
+          photoSyncFailedCount: 0,
+          photoSyncArchiveZipCount: 0,
+          photoSyncArchivePhotoCount: 0,
+          photoSyncArchiveErrors: [],
+          photoSyncErrors: [],
+          photoSyncSkippedOnVercel: false,
+          photoSyncHint: "Photo sync skipped (--skip-photos).",
+        }
+      : await syncCandidatePhotos().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       return {
         photoSyncEnabled: process.env.VERCEL !== "1",

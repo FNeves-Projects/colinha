@@ -36,10 +36,11 @@ import { candidateFromSummary, candidateProfileLookupId } from "@/lib/candidates
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
 import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { fetchTicketChapaForCandidate } from "@/lib/ticket-mate-fetch";
+import { fetchCandidateProposals } from "@/lib/candidate-proposal-fetch";
 import { isTicketChapaMember, slateMemberRoleLabel, slateMateRoleLabel, ticketHeadOfficeCodeFor } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
-import type { Candidate, CandidateSummary } from "@/lib/types";
+import type { Candidate, CandidateProposal, CandidateSummary } from "@/lib/types";
 import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
 import { useTicketSlates } from "@/hooks/use-ticket-mates";
@@ -778,6 +779,8 @@ function ProfileContent({
   onPrefetchMate?: (candidate: CandidateSummary) => void;
 }) {
   const [ticketSlate, setTicketSlate] = useState<CandidateSummary[]>([]);
+  const [proposals, setProposals] = useState<CandidateProposal[] | null>(null);
+  const [proposalsLoading, setProposalsLoading] = useState(false);
   const age = candidate.birthDate
     ? new Date(2026, 9, 4).getFullYear() - new Date(candidate.birthDate).getFullYear()
     : null;
@@ -802,6 +805,29 @@ function ProfileContent({
 
     return () => controller.abort();
   }, [candidate.id, candidate.officeCode, candidate.ballotNumber, candidate.uf]);
+
+  useEffect(() => {
+    if (!candidate.sqCandidate) {
+      setProposals(null);
+      setProposalsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setProposalsLoading(true);
+    void fetchCandidateProposals(candidate, controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) setProposals(items);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setProposals([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setProposalsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [candidate.sqCandidate, candidate.uf]);
 
   const ticketHeadOfficeCode = ticketHeadOfficeCodeFor(candidate.officeCode);
 
@@ -850,6 +876,30 @@ function ProfileContent({
               ))}
             </ul>
           </div>
+        )}
+      </section>
+
+      <section className="profile-section">
+        <h3>Propostas</h3>
+        <p className="source-note">Documento registrado no TSE.</p>
+        {proposalsLoading ? (
+          <p className="profile-proposals-status">Carregando…</p>
+        ) : (proposals?.length ?? 0) > 0 ? (
+          <div className="profile-proposals-list">
+            {proposals?.map((proposal) => (
+              <a
+                className="btn-glass btn-glass--sm"
+                href={proposal.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                key={proposal.id}
+              >
+                {proposal.title} <ExternalLink size={13} />
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="profile-proposals-status">Não informada pelo TSE.</p>
         )}
       </section>
 

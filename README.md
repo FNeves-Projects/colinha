@@ -22,6 +22,16 @@ npm run dev
 - The API receives only the search term.
 - The importer tries these sources in order: TSE Open Data ZIP/CSV files,
   DivulgaCand, and a pinned mirror snapshot of the original TSE CSV files.
+- After each CSV import, live fields such as **situação** are enriched from
+  DivulgaCand (the CSV often ships `#NE` placeholders).
+- Run the full local sync when Vercel cron is blocked:
+
+```bash
+npm run sync
+```
+
+Use `npm run sync -- --skip-photos` to refresh database fields only.
+Use `npm run sync:photos` for photos alone.
 - The contingency snapshot is pinned to an auditable commit. It never replaces a
   newer TSE candidate photo already stored in Neon.
 - Candidate photos must be loaded from official TSE photo ZIP files saved locally.
