@@ -1,4 +1,5 @@
-import { TERESINHA_SQ_CANDIDATE, tseCandidatePhotoUrl, tseCandidateUrl } from "./tse-urls";
+import { candidatePhotoPublicUrl } from "./candidate-photo-sync";
+import { TERESINHA_SQ_CANDIDATE, tseCandidateUrl } from "./tse-urls";
 
 export type Office = {
   id: string;
@@ -34,7 +35,7 @@ export const TERESINHA: import("./types").Candidate = {
   birthDate: null,
   occupation: null,
   education: null,
-  photoUrl: tseCandidatePhotoUrl(TERESINHA_SQ_CANDIDATE),
+  photoUrl: candidatePhotoPublicUrl(TERESINHA_SQ_CANDIDATE),
   tseUrl: tseCandidateUrl("SP", TERESINHA_SQ_CANDIDATE),
   socials: [],
   assets: [],

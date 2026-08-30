@@ -233,3 +233,23 @@ export async function syncCandidatePhotos(
 
   return result;
 }
+
+export async function repairCandidatePhotoUrls() {
+  const sql = getSql();
+  const rows = await sql.query(
+    `UPDATE candidates
+        SET photo_url = $1 || '/' || sq_candidate || '.jpg',
+            updated_at = now()
+      WHERE election_year = 2026
+        AND uf IN ('SP', 'BR')
+        AND sq_candidate ~ '^[0-9]+$'
+        AND (
+          photo_url IS NULL
+          OR photo_url = ''
+          OR photo_url NOT LIKE $1 || '/%'
+        )
+      RETURNING sq_candidate`,
+    [CANDIDATE_PHOTO_PUBLIC_PATH],
+  ) as Array<{ sq_candidate: string }>;
+  return rows.length;
+}

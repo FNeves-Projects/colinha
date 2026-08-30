@@ -67,26 +67,16 @@ async function loadRelated(candidateId: string) {
   };
 }
 
-function overlayTeresinha(fromDb: Candidate): Candidate {
+function withFixedSlotIdentity(fromDb: Candidate): Candidate {
   return {
-    ...TERESINHA,
-    photoUrl: fromDb.photoUrl ?? TERESINHA.photoUrl,
-    tseUrl: fromDb.tseUrl ?? TERESINHA.tseUrl,
-    status: fromDb.status ?? TERESINHA.status,
-    fullName: fromDb.fullName || TERESINHA.fullName,
-    partyAcronym: fromDb.partyAcronym ?? TERESINHA.partyAcronym,
-    occupation: fromDb.occupation ?? TERESINHA.occupation,
-    education: fromDb.education ?? TERESINHA.education,
-    birthDate: fromDb.birthDate ?? TERESINHA.birthDate,
-    socials: fromDb.socials,
-    assets: [],
-    sourceUpdatedAt: fromDb.sourceUpdatedAt,
+    ...fromDb,
+    id: TERESINHA.id,
   };
 }
 
 export async function getLiveTeresinha(): Promise<Candidate> {
   const fromDb = await getCandidateBySqCandidate(TERESINHA_SQ_CANDIDATE);
-  return fromDb ? overlayTeresinha(fromDb) : TERESINHA;
+  return fromDb ? withFixedSlotIdentity(fromDb) : TERESINHA;
 }
 
 async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate | null> {
@@ -162,7 +152,7 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   if (!row) return null;
   if (row.sq_candidate === TERESINHA_SQ_CANDIDATE) {
     const related = await loadRelated(row.id);
-    return overlayTeresinha(mapRow(row, related.socials));
+    return withFixedSlotIdentity(mapRow(row, related.socials));
   }
   const related = await loadRelated(row.id);
   return mapRow(row, related.socials);

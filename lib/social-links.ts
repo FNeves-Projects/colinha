@@ -10,17 +10,31 @@ function stripWrappingQuotes(value: string) {
   return value.trim().replace(/^["']+|["']+$/g, "").trim();
 }
 
-function toHttpsUrl(raw: string): URL | null {
-  const value = stripWrappingQuotes(raw);
-  if (!value) return null;
+function sanitizeTseUrlInput(raw: string) {
+  let value = stripWrappingQuotes(raw);
+  if (!value) return "";
 
-  const withoutProtocols = value.replace(/^(https?:\/\/)+/i, "");
-  if (!withoutProtocols || /\s/.test(withoutProtocols.split("?")[0] ?? "")) return null;
+  // Repair rows previously stored with a double protocol prefix.
+  value = value.replace(/^https:\/\/https\/\//i, "https://");
+  value = value.replace(/^http:\/\/https\/\//i, "https://");
+
+  // TSE often publishes HTTPS//HOST (missing colon) or HTTPS://HOST.
+  value = value.replace(/^https?\/\//i, "https://");
+
+  // Strip any leading protocol and normalize to a single https:// prefix below.
+  value = value.replace(/^(?:https?:\/\/)+/i, "");
+  return value;
+}
+
+function toHttpsUrl(raw: string): URL | null {
+  const hostAndPath = sanitizeTseUrlInput(raw);
+  if (!hostAndPath || /\s/.test(hostAndPath.split("?")[0] ?? "")) return null;
 
   try {
-    const url = new URL(`https://${withoutProtocols}`);
+    const url = new URL(`https://${hostAndPath}`);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     url.protocol = "https:";
+    url.hostname = url.hostname.toLowerCase();
     if (!url.hostname.includes(".")) return null;
     return url;
   } catch {
