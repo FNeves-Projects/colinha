@@ -16,6 +16,16 @@ import {
   X,
 } from "lucide-react";
 import { OFFICES, TERESINHA, type Office } from "@/lib/offices";
+import {
+  nullBallotNumber,
+  normalizeSelections,
+  selectionCandidate,
+  selectionNotice,
+  selectionShareLine,
+  type OfficeSelection,
+  type Selections,
+  type SpecialVoteKind,
+} from "@/lib/ballot-selections";
 import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
@@ -23,12 +33,16 @@ import type { Candidate, CandidateSummary } from "@/lib/types";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
-type Selections = Record<string, CandidateSummary | null>;
 const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
 
 function initialSelections(): Selections {
   return Object.fromEntries(
-    OFFICES.map((office) => [office.id, office.fixed ? TERESINHA : null]),
+    OFFICES.map((office) => [
+      office.id,
+      office.fixed
+        ? { type: "candidate", candidate: sanitizeCandidateSummary(TERESINHA) }
+        : null,
+    ]),
   );
 }
 
@@ -57,8 +71,17 @@ function sanitizeCandidateSummary(candidate: CandidateSummary): CandidateSummary
 function sanitizeSelections(selections: Selections): Selections {
   return Object.fromEntries(
     OFFICES.map((office) => {
-      const candidate = selections[office.id];
-      return [office.id, candidate ? sanitizeCandidateSummary(candidate) : null];
+      const selection = selections[office.id] ?? null;
+      if (office.fixed) {
+        return [office.id, { type: "candidate", candidate: sanitizeCandidateSummary(TERESINHA) } satisfies OfficeSelection];
+      }
+      if (selection?.type === "candidate") {
+        return [office.id, { type: "candidate", candidate: sanitizeCandidateSummary(selection.candidate) }];
+      }
+      if (selection?.type === "special") {
+        return [office.id, selection];
+      }
+      return [office.id, null];
     }),
   );
 }
@@ -118,20 +141,39 @@ function PartyBadge({ acronym }: { acronym: string | null | undefined }) {
   );
 }
 
-function BallotPreviewRow({ office, candidate }: { office: Office; candidate: CandidateSummary | null }) {
+function BallotPreviewRow({ office, selection }: { office: Office; selection: OfficeSelection }) {
   const officeLabel = previewOfficeLabel(office.id, office.label);
 
-  if (!candidate) {
+  if (!selection) {
     return (
-      <div className="ballot-row ballot-row-empty">
+      <div className="ballot-row ballot-row-empty ballot-row-pending">
         <div className="ballot-row-main">
           <span className="ballot-row-office">{officeLabel}</span>
-          <span className="ballot-blank-pill">BRANCO</span>
+          <span className="ballot-pending-mark">—</span>
         </div>
       </div>
     );
   }
 
+  if (selection.type === "special") {
+    return (
+      <div className="ballot-row ballot-row-empty">
+        <div className="ballot-row-main">
+          <span className="ballot-row-office">{officeLabel}</span>
+          {selection.vote === "branco" ? (
+            <span className="ballot-blank-pill">BRANCO</span>
+          ) : (
+            <>
+              <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+              <strong className="ballot-row-name ballot-row-special">NULO</strong>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const candidate = selection.candidate;
   return (
     <div className="ballot-row">
       <div className="ballot-row-photo">
@@ -145,6 +187,70 @@ function BallotPreviewRow({ office, candidate }: { office: Office; candidate: Ca
       <div className="ballot-row-party">
         <PartyBadge acronym={candidate.partyAcronym} />
       </div>
+    </div>
+  );
+}
+
+function SpecialVoteCard({
+  office,
+  vote,
+  onClear,
+}: {
+  office: Office;
+  vote: SpecialVoteKind;
+  onClear: () => void;
+}) {
+  return (
+    <article className={`office-card selected special-vote special-vote-${vote}`}>
+      <span className="empty-photo special-vote-photo" aria-hidden="true" />
+      <div className="office-card-copy">
+        <div className="office-card-heading">
+          <span>{office.label}</span>
+        </div>
+        <strong>{vote === "branco" ? "Voto em branco" : "Voto nulo"}</strong>
+        <small>
+          {vote === "branco"
+            ? "Aperte BRANCO na urna. Não escolhe ninguém para o cargo."
+            : "Digite um número inexistente na urna. Anula o voto naquele cargo."}
+        </small>
+      </div>
+      <div className="selected-number">
+        <button className="clear-button" type="button" onClick={onClear} aria-label={`Trocar ${office.label}`}>
+          <ArrowLeftRight size={16} strokeWidth={2.2} />
+        </button>
+        {vote === "branco" ? (
+          <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
+        ) : (
+          <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function VoteOptionButtons({
+  office,
+  onSelect,
+}: {
+  office: Office;
+  onSelect: (vote: SpecialVoteKind) => void;
+}) {
+  return (
+    <div className="vote-options">
+      <button type="button" className="vote-option vote-option-null" onClick={() => onSelect("nulo")}>
+        <span className="vote-option-label">Votar nulo</span>
+        <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+        <span className="vote-option-tip">
+          Número que não existe. Anula o voto naquele cargo. Fonte: TSE.
+        </span>
+      </button>
+      <button type="button" className="vote-option vote-option-blank" onClick={() => onSelect("branco")}>
+        <span className="vote-option-label">Votar em branco</span>
+        <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
+        <span className="vote-option-tip">
+          Aperte BRANCO na urna. Não escolhe ninguém para o cargo. Fonte: TSE.
+        </span>
+      </button>
     </div>
   );
 }
@@ -194,12 +300,14 @@ function CandidatePicker({
   office,
   selected,
   onSelect,
+  onSelectSpecial,
   onClear,
   onInspect,
 }: {
   office: Office;
-  selected: CandidateSummary | null;
+  selected: OfficeSelection;
   onSelect: (candidate: CandidateSummary) => void;
+  onSelectSpecial: (vote: SpecialVoteKind) => void;
   onClear: () => void;
   onInspect: (candidate: CandidateSummary) => void;
 }) {
@@ -247,12 +355,22 @@ function CandidatePicker({
     };
   }, [office, query, selected]);
 
-  if (selected) {
+  if (selected?.type === "candidate") {
     return (
       <SelectedOfficeCard
         office={office}
-        candidate={selected}
+        candidate={selected.candidate}
         onInspect={onInspect}
+        onClear={onClear}
+      />
+    );
+  }
+
+  if (selected?.type === "special") {
+    return (
+      <SpecialVoteCard
+        office={office}
+        vote={selected.vote}
         onClear={onClear}
       />
     );
@@ -279,6 +397,7 @@ function CandidatePicker({
           number={/^\d+$/.test(query) ? query.slice(0, office.digits) : undefined}
           digits={office.digits}
         />
+        {!office.fixed && <VoteOptionButtons office={office} onSelect={onSelectSpecial} />}
         {(results.length > 0 || searched) && (
           <div className="search-results" role="listbox" aria-label={`Resultados para ${office.label}`}>
             {results.map((candidate) => (
@@ -381,7 +500,10 @@ export function BallotBuilder() {
         muted?: boolean;
       };
       if (saved.selections) {
-        setSelections(sanitizeSelections({ ...initialSelections(), ...saved.selections, federal: TERESINHA }));
+        setSelections(sanitizeSelections({
+          ...initialSelections(),
+          ...normalizeSelections(saved.selections as Record<string, unknown>),
+        }));
       }
       setMuted(Boolean(saved.muted));
     } catch {
@@ -394,13 +516,13 @@ export function BallotBuilder() {
     if (!hydrated || refreshedSavedSelections.current) return;
     refreshedSavedSelections.current = true;
 
-    const refreshableOffices = OFFICES.filter((office) => Boolean(selections[office.id]));
+    const refreshableOffices = OFFICES.filter((office) => selectionCandidate(selections[office.id]));
     if (!refreshableOffices.length) return;
 
     let cancelled = false;
     void Promise.all(
       refreshableOffices.map(async (office) => {
-        const savedCandidate = selections[office.id];
+        const savedCandidate = selectionCandidate(selections[office.id]);
         if (!savedCandidate) return null;
 
         try {
@@ -432,8 +554,8 @@ export function BallotBuilder() {
 
         for (const update of updates) {
           if (!update) continue;
-          if (!update.allowReplace && current[update.officeId]?.id !== update.savedCandidateId) continue;
-          next[update.officeId] = update.candidate;
+          if (!update.allowReplace && selectionCandidate(current[update.officeId])?.id !== update.savedCandidateId) continue;
+          next[update.officeId] = { type: "candidate", candidate: update.candidate };
           changed = true;
         }
 
@@ -462,9 +584,10 @@ export function BallotBuilder() {
   }, [hydrated, muted, selections]);
 
   const duplicateSenator = useMemo(() => {
-    const first = selections.senador1?.ballotNumber;
-    const second = selections.senador2?.ballotNumber;
-    return Boolean(first && second && first === second);
+    const first = selections.senador1;
+    const second = selections.senador2;
+    if (first?.type !== "candidate" || second?.type !== "candidate") return false;
+    return first.candidate.ballotNumber === second.candidate.ballotNumber;
   }, [selections]);
 
   function playUrnaSound() {
@@ -482,8 +605,17 @@ export function BallotBuilder() {
 
   function selectCandidate(office: Office, candidate: CandidateSummary) {
     const cleanCandidate = sanitizeCandidateSummary(candidate);
-    setSelections((current) => ({ ...current, [office.id]: cleanCandidate }));
+    setSelections((current) => ({
+      ...current,
+      [office.id]: { type: "candidate", candidate: cleanCandidate },
+    }));
     setNotice(`${candidate.ballotName} foi adicionado à sua colinha.`);
+    playConfirmation();
+  }
+
+  function selectSpecialVote(office: Office, vote: SpecialVoteKind) {
+    setSelections((current) => ({ ...current, [office.id]: { type: "special", vote } }));
+    setNotice(selectionNotice({ type: "special", vote }));
     playConfirmation();
   }
 
@@ -521,11 +653,7 @@ export function BallotBuilder() {
   }
 
   function buildBallotShareText() {
-    const lines = OFFICES.map((office) => {
-      const candidate = selections[office.id];
-      if (!candidate) return `${office.label}: escolha pendente`;
-      return `${office.label}: ${candidate.ballotName} — nº ${candidate.ballotNumber}`;
-    });
+    const lines = OFFICES.map((office) => selectionShareLine(office.label, selections[office.id], office.digits));
 
     return [
       "Minha colinha 2026 — São Paulo",
@@ -642,6 +770,7 @@ export function BallotBuilder() {
                 key={office.id}
                 selected={selections[office.id]}
                 onSelect={(candidate) => selectCandidate(office, candidate)}
+                onSelectSpecial={(vote) => selectSpecialVote(office, vote)}
                 onClear={() => setSelections((current) => ({ ...current, [office.id]: null }))}
                 onInspect={inspectCandidate}
               />
@@ -670,7 +799,7 @@ export function BallotBuilder() {
                   <BallotPreviewRow
                     key={office.id}
                     office={office}
-                    candidate={selections[office.id]}
+                    selection={selections[office.id]}
                   />
                 ))}
               </div>
