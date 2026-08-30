@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   Check,
   ExternalLink,
+  FileText,
   Info,
   LockKeyhole,
   Moon,
@@ -33,10 +34,11 @@ import {
   type SpecialVoteKind,
 } from "@/lib/ballot-selections";
 import { candidateFromSummary, candidateProfileLookupId } from "@/lib/candidates";
+import { formatGenderLabel } from "@/lib/candidate-live-details";
+import { proposalDownloadFileName, proposalPdfApiUrl } from "@/lib/divulga-proposals";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
 import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { fetchTicketChapaForCandidate } from "@/lib/ticket-mate-fetch";
-import { fetchCandidateProposals } from "@/lib/candidate-proposal-fetch";
 import { isTicketChapaMember, slateMemberRoleLabel, slateMateRoleLabel, ticketHeadOfficeCodeFor } from "@/lib/ticket-mates";
 import { normalizeSocialLinks } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
@@ -769,7 +771,74 @@ function CandidatePicker({
 
 function profileNeedsRefresh(candidate: Candidate | undefined) {
   if (!candidate) return true;
-  return !candidate.status || !candidate.occupation || !candidate.education;
+  return (
+    !candidate.status
+    || !candidate.occupation
+    || !candidate.education
+    || !candidate.gender
+    || !candidate.maritalStatus
+    || !candidate.nationality
+    || !candidate.birthplace
+    || candidate.proposals === undefined
+  );
+}
+
+function ProposalPdfModal({
+  proposal,
+  onClose,
+}: {
+  proposal: CandidateProposal;
+  onClose: () => void;
+}) {
+  const previewUrl = proposalPdfApiUrl(proposal.id);
+  const downloadUrl = proposalPdfApiUrl(proposal.id, true);
+  const fileName = proposalDownloadFileName(proposal.title);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  function handleDownload() {
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = fileName;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  return (
+    <div className="pdf-preview-backdrop proposal-pdf-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="pdf-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Visualizar proposta: ${proposal.title}`}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="pdf-preview-head">
+          <h2>{proposal.title}</h2>
+          <button className="btn-glass btn-glass--icon-sm drawer-close" type="button" onClick={onClose} aria-label="Fechar proposta">
+            <X size={21} />
+          </button>
+        </div>
+        <div className="pdf-preview-frame-wrap">
+          <iframe className="pdf-preview-frame" src={previewUrl} title={proposal.title} />
+        </div>
+        <div className="pdf-preview-actions">
+          <button className="btn-glass btn-glass--primary btn-glass--lg" type="button" onClick={handleDownload}>
+            <Save size={18} strokeWidth={2.2} aria-hidden="true" />
+            Baixar PDF
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function ProfileContent({
@@ -784,8 +853,7 @@ function ProfileContent({
   onPrefetchMate?: (candidate: CandidateSummary) => void;
 }) {
   const [ticketSlate, setTicketSlate] = useState<CandidateSummary[]>([]);
-  const [proposals, setProposals] = useState<CandidateProposal[] | null>(null);
-  const [proposalsLoading, setProposalsLoading] = useState(false);
+  const [proposalPreview, setProposalPreview] = useState<CandidateProposal | null>(null);
   const age = candidate.birthDate
     ? new Date(2026, 9, 4).getFullYear() - new Date(candidate.birthDate).getFullYear()
     : null;
@@ -811,30 +879,9 @@ function ProfileContent({
     return () => controller.abort();
   }, [candidate.id, candidate.officeCode, candidate.ballotNumber, candidate.uf]);
 
-  useEffect(() => {
-    if (!candidate.sqCandidate) {
-      setProposals(null);
-      setProposalsLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setProposalsLoading(true);
-    void fetchCandidateProposals(candidate, controller.signal)
-      .then((items) => {
-        if (!controller.signal.aborted) setProposals(items);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setProposals([]);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setProposalsLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [candidate.sqCandidate, candidate.uf]);
-
   const ticketHeadOfficeCode = ticketHeadOfficeCodeFor(candidate.officeCode);
+  const proposals = candidate.proposals;
+  const proposalsLoading = detailsLoading || (proposals === undefined && Boolean(candidate.sqCandidate));
 
   return (
     <>
@@ -855,6 +902,10 @@ function ProfileContent({
           <div><span>Situação</span><strong>{profileDetailValue(candidate.status, detailsLoading)}</strong></div>
           <div><span>Ocupação</span><strong>{profileDetailValue(candidate.occupation, detailsLoading)}</strong></div>
           <div><span>Escolaridade</span><strong>{profileDetailValue(candidate.education, detailsLoading)}</strong></div>
+          <div><span>Gênero</span><strong>{profileDetailValue(formatGenderLabel(candidate.gender), detailsLoading)}</strong></div>
+          <div><span>Estado civil</span><strong>{profileDetailValue(candidate.maritalStatus, detailsLoading)}</strong></div>
+          <div><span>Nacionalidade</span><strong>{profileDetailValue(candidate.nationality, detailsLoading)}</strong></div>
+          <div><span>Naturalidade</span><strong>{profileDetailValue(candidate.birthplace, detailsLoading)}</strong></div>
           <div><span>Fonte</span><strong>{candidate.source}</strong></div>
         </div>
         {ticketSlate.length > 0 && ticketHeadOfficeCode !== null && (
@@ -892,15 +943,18 @@ function ProfileContent({
         ) : (proposals?.length ?? 0) > 0 ? (
           <div className="profile-proposals-list">
             {proposals?.map((proposal) => (
-              <a
-                className="btn-glass btn-glass--sm"
-                href={proposal.url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                className="btn-glass btn-glass--sm profile-proposal-button"
+                onClick={() => setProposalPreview(proposal)}
                 key={proposal.id}
               >
-                {proposal.title} <ExternalLink size={13} />
-              </a>
+                <span className="profile-proposal-button-copy">
+                  <FileText size={14} aria-hidden="true" />
+                  {proposal.title}
+                </span>
+                <span className="profile-proposal-button-action">Ler proposta</span>
+              </button>
             ))}
           </div>
         ) : (
@@ -926,6 +980,10 @@ function ProfileContent({
         <a className="btn-glass btn-glass--sm btn-glass--block tse-link" href={tseHref} target="_blank" rel="noopener noreferrer">
           Ver candidato no site do TSE <ExternalLink size={15} />
         </a>
+      )}
+
+      {proposalPreview && (
+        <ProposalPdfModal proposal={proposalPreview} onClose={() => setProposalPreview(null)} />
       )}
     </>
   );

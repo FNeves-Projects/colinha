@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCandidateProposals } from "@/lib/candidate-proposals";
+import { proposalDownloadFileName, tseProposalDocumentUrl } from "@/lib/divulga-proposals";
 import { getCandidateById, getTicketChapaForCandidate, getTicketSlateForHead, listPartiesForOffice, searchCandidates } from "@/lib/candidates";
 
 export const runtime = "nodejs";
@@ -37,6 +38,11 @@ const proposalsSchema = z.object({
   uf: z.string().trim().transform((value) => (value === "BRASIL" ? "BR" : value)).pipe(z.enum(["SP", "BR"])),
 });
 
+const proposalPdfSchema = z.object({
+  fileId: z.string().trim().regex(/^\d+$/),
+  download: z.enum(["1"]).optional(),
+});
+
 export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   try {
@@ -60,6 +66,40 @@ export async function GET(request: NextRequest) {
         uf: params.data.uf,
       });
       return NextResponse.json({ proposals }, { headers: { "Cache-Control": "public, max-age=3600" } });
+    }
+
+    if (request.nextUrl.searchParams.get("proposalPdf") === "1") {
+      const params = proposalPdfSchema.safeParse({
+        fileId: request.nextUrl.searchParams.get("fileId"),
+        download: request.nextUrl.searchParams.get("download") === "1" ? "1" : undefined,
+      });
+      if (!params.success) {
+        return NextResponse.json({ error: "Invalid proposal PDF lookup." }, { status: 400 });
+      }
+
+      const sourceUrl = tseProposalDocumentUrl(params.data.fileId);
+      const response = await fetch(sourceUrl, {
+        headers: { Accept: "application/pdf", "User-Agent": "ColinhaDigital/1.0" },
+        signal: AbortSignal.timeout(20_000),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        return NextResponse.json({ error: "Unable to load proposal PDF." }, { status: 502 });
+      }
+
+      const bytes = await response.arrayBuffer();
+      const fileName = proposalDownloadFileName(`proposta-${params.data.fileId}`);
+      const disposition = params.data.download
+        ? `attachment; filename="${fileName}"`
+        : `inline; filename="${fileName}"`;
+
+      return new NextResponse(bytes, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": disposition,
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
     }
 
     if (request.nextUrl.searchParams.get("ticketChapa") === "1") {

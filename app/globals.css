@@ -1755,6 +1755,30 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-size: 9.5px;
   color: var(--ink);
 }
+.profile-proposal-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  font-size: 9.5px;
+  color: var(--ink);
+}
+.profile-proposal-button-copy {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+.profile-proposal-button-action {
+  flex-shrink: 0;
+  color: var(--blue);
+  font-weight: 800;
+}
+.proposal-pdf-backdrop {
+  z-index: 120;
+}
 .tse-link {
   display: flex;
   align-items: center;

@@ -29,6 +29,10 @@ export type Candidate = {
   partyAcronym: string | null;
   status: string | null;
   birthDate: string | null;
+  gender: string | null;
+  maritalStatus: string | null;
+  nationality: string | null;
+  birthplace: string | null;
   occupation: string | null;
   education: string | null;
   photoUrl: string | null;
@@ -37,6 +41,7 @@ export type Candidate = {
   assets: DeclaredAsset[];
   source: "TSE" | "Campanha";
   sourceUpdatedAt: string | null;
+  proposals?: CandidateProposal[];
 };
 
 export type CandidateSummary = Pick<

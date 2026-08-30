@@ -18,6 +18,8 @@ type CandidateRow = {
   party_acronym: string | null;
   status: string | null;
   birth_date: string | null;
+  gender: string | null;
+  marital_status: string | null;
   occupation: string | null;
   education: string | null;
   photo_url: string | null;
@@ -45,6 +47,10 @@ function mapRow(row: CandidateRow, socials: SocialLink[] = []): Candidate {
     partyAcronym: cleanStoredValue(row.party_acronym),
     status: cleanStoredValue(row.status),
     birthDate: row.birth_date,
+    gender: cleanStoredValue(row.gender),
+    maritalStatus: cleanStoredValue(row.marital_status),
+    nationality: null,
+    birthplace: null,
     occupation: cleanStoredValue(row.occupation),
     education: cleanStoredValue(row.education),
     photoUrl: cleanStoredValue(row.photo_url),
@@ -93,6 +99,10 @@ export function candidateFromSummary(summary: CandidateSummary): Candidate {
     ...summary,
     electionYear: extended.electionYear ?? 2026,
     birthDate: extended.birthDate ?? null,
+    gender: extended.gender ?? null,
+    maritalStatus: extended.maritalStatus ?? null,
+    nationality: extended.nationality ?? null,
+    birthplace: extended.birthplace ?? null,
     occupation: extended.occupation ?? null,
     education: extended.education ?? null,
     tseUrl: extended.tseUrl ?? null,
@@ -105,15 +115,15 @@ export function candidateFromSummary(summary: CandidateSummary): Candidate {
 async function hydrateCandidateDetails(candidate: Candidate): Promise<Candidate> {
   if (typeof window !== "undefined") return candidate;
 
-  const { candidateNeedsLiveDetails, fetchCandidateLiveDetails, mergeCandidateLiveDetails } = await import(
+  const { candidateNeedsLiveEnrichment, fetchCandidateLiveBundle, mergeCandidateLiveBundle } = await import(
     "./candidate-live-details"
   );
-  if (!candidateNeedsLiveDetails(candidate)) return candidate;
-  const live = await fetchCandidateLiveDetails({
+  if (!candidateNeedsLiveEnrichment(candidate)) return candidate;
+  const bundle = await fetchCandidateLiveBundle({
     sqCandidate: candidate.sqCandidate,
     uf: candidate.uf,
   });
-  return mergeCandidateLiveDetails(candidate, live);
+  return mergeCandidateLiveBundle(candidate, bundle);
 }
 
 async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate | null> {
@@ -122,7 +132,7 @@ async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate
   const rows = await sql.query(
     `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
             ballot_number, ballot_name, full_name, party_acronym, status,
-            birth_date::text, occupation, education, photo_url, tse_url, source,
+            birth_date::text, gender, marital_status, occupation, education, photo_url, tse_url, source,
             source_updated_at::text
        FROM candidates WHERE sq_candidate = $1 LIMIT 1`,
     [sqCandidate],
@@ -334,7 +344,7 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   const rows = await sql.query(
     `SELECT id::text, sq_candidate, election_year, uf, office_code, office_name,
             ballot_number, ballot_name, full_name, party_acronym, status,
-            birth_date::text, occupation, education, photo_url, tse_url, source,
+            birth_date::text, gender, marital_status, occupation, education, photo_url, tse_url, source,
             source_updated_at::text
        FROM candidates WHERE id::text = $1 LIMIT 1`,
     [id],
