@@ -342,10 +342,7 @@ export function BallotBuilder() {
     if (!hydrated || refreshedSavedSelections.current) return;
     refreshedSavedSelections.current = true;
 
-    const refreshableOffices = OFFICES.filter((office) => {
-      const candidate = selections[office.id];
-      return candidate && !office.fixed && candidate.id !== TERESINHA.id;
-    });
+    const refreshableOffices = OFFICES.filter((office) => Boolean(selections[office.id]));
     if (!refreshableOffices.length) return;
 
     let cancelled = false;
@@ -355,7 +352,10 @@ export function BallotBuilder() {
         if (!savedCandidate) return null;
 
         try {
-          const response = await fetch(`/api/candidates?id=${encodeURIComponent(savedCandidate.id)}`, {
+          const lookupId = office.fixed || savedCandidate.id === TERESINHA.id
+            ? TERESINHA.id
+            : savedCandidate.id;
+          const response = await fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, {
             cache: "no-store",
           });
           const data = await response.json();
@@ -364,6 +364,7 @@ export function BallotBuilder() {
           return {
             officeId: office.id,
             savedCandidateId: savedCandidate.id,
+            allowReplace: Boolean(office.fixed),
             candidate: sanitizeCandidateSummary(data.candidate as CandidateSummary),
           };
         } catch {
@@ -379,7 +380,7 @@ export function BallotBuilder() {
 
         for (const update of updates) {
           if (!update) continue;
-          if (current[update.officeId]?.id !== update.savedCandidateId) continue;
+          if (!update.allowReplace && current[update.officeId]?.id !== update.savedCandidateId) continue;
           next[update.officeId] = update.candidate;
           changed = true;
         }
@@ -435,13 +436,12 @@ export function BallotBuilder() {
   }
 
   async function inspectCandidate(candidate: CandidateSummary) {
-    if (candidate.id === TERESINHA.id) {
-      setProfile(TERESINHA);
-      return;
-    }
     setProfileLoading(true);
     try {
-      const response = await fetch(`/api/candidates?id=${encodeURIComponent(candidate.id)}`, { cache: "no-store" });
+      const lookupId = candidate.id === TERESINHA.id || candidate.sqCandidate === TERESINHA.sqCandidate
+        ? TERESINHA.id
+        : candidate.id;
+      const response = await fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, { cache: "no-store" });
       const data = await response.json();
       if (response.ok) setProfile(data.candidate);
     } finally {
