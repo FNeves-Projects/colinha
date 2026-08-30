@@ -146,7 +146,7 @@ async function downloadCsvRows(url: string): Promise<CsvRow[]> {
 
 function nullable(value?: string) {
   const clean = value?.trim();
-  return clean && clean !== "#NULO#" && clean !== "-1" ? clean : null;
+  return clean && !["#NULO#", "#NE", "-1"].includes(clean) ? clean : null;
 }
 
 function isoDate(value?: string) {

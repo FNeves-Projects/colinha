@@ -22,6 +22,7 @@ import type { Candidate, CandidateSummary } from "@/lib/types";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
 type Selections = Record<string, CandidateSummary | null>;
+const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
 
 function initialSelections(): Selections {
   return Object.fromEntries(
@@ -37,8 +38,37 @@ function candidateInitials(candidate: CandidateSummary) {
     .join("");
 }
 
+function cleanCandidateText(value: string | null | undefined) {
+  const clean = value?.trim();
+  return clean && !EMPTY_TSE_VALUES.has(clean.toUpperCase()) ? clean : null;
+}
+
+function sanitizeCandidateSummary(candidate: CandidateSummary): CandidateSummary {
+  return {
+    ...candidate,
+    partyAcronym: cleanCandidateText(candidate.partyAcronym),
+    status: cleanCandidateText(candidate.status),
+    photoUrl: cleanCandidateText(candidate.photoUrl),
+  };
+}
+
+function sanitizeSelections(selections: Selections): Selections {
+  return Object.fromEntries(
+    OFFICES.map((office) => {
+      const candidate = selections[office.id];
+      return [office.id, candidate ? sanitizeCandidateSummary(candidate) : null];
+    }),
+  );
+}
+
 function CandidatePhoto({ candidate, size = 58 }: { candidate: CandidateSummary; size?: number }) {
-  if (candidate.photoUrl) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [candidate.photoUrl]);
+
+  if (candidate.photoUrl && !imageFailed) {
     return (
       <Image
         className="candidate-photo"
@@ -49,11 +79,12 @@ function CandidatePhoto({ candidate, size = 58 }: { candidate: CandidateSummary;
         sizes={`${size}px`}
         unoptimized={candidate.photoUrl.startsWith("http")}
         crossOrigin={candidate.photoUrl.startsWith("http") ? "anonymous" : undefined}
+        onError={() => setImageFailed(true)}
       />
     );
   }
   return (
-    <span className="candidate-photo candidate-initials" aria-hidden="true">
+    <span className="candidate-photo candidate-initials" role="img" aria-label={`Iniciais de ${candidate.ballotName}`}>
       {candidateInitials(candidate)}
     </span>
   );
@@ -112,7 +143,7 @@ function CandidatePicker({
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Falha na busca");
-        setResults(data.candidates ?? []);
+        setResults((data.candidates ?? []).map(sanitizeCandidateSummary));
         setSearched(true);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
@@ -296,7 +327,7 @@ export function BallotBuilder() {
         muted?: boolean;
       };
       if (saved.selections) {
-        setSelections({ ...initialSelections(), ...saved.selections, federal: TERESINHA });
+        setSelections(sanitizeSelections({ ...initialSelections(), ...saved.selections, federal: TERESINHA }));
       }
       setMuted(Boolean(saved.muted));
     } catch {
@@ -338,7 +369,8 @@ export function BallotBuilder() {
   }
 
   function selectCandidate(office: Office, candidate: CandidateSummary) {
-    setSelections((current) => ({ ...current, [office.id]: candidate }));
+    const cleanCandidate = sanitizeCandidateSummary(candidate);
+    setSelections((current) => ({ ...current, [office.id]: cleanCandidate }));
     setNotice(`${candidate.ballotName} foi adicionado à sua colinha.`);
     playConfirmation();
   }

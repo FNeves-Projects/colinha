@@ -23,6 +23,11 @@ type CandidateRow = {
   source_updated_at: string | null;
 };
 
+function cleanStoredValue(value: string | null) {
+  const clean = value?.trim();
+  return clean && !["#NULO#", "#NE", "-1"].includes(clean) ? clean : null;
+}
+
 function mapRow(row: CandidateRow, socials: SocialLink[] = [], assets: DeclaredAsset[] = []): Candidate {
   return {
     id: String(row.id),
@@ -34,13 +39,13 @@ function mapRow(row: CandidateRow, socials: SocialLink[] = [], assets: DeclaredA
     ballotNumber: row.ballot_number,
     ballotName: row.ballot_name,
     fullName: row.full_name,
-    partyAcronym: row.party_acronym,
-    status: row.status,
+    partyAcronym: cleanStoredValue(row.party_acronym),
+    status: cleanStoredValue(row.status),
     birthDate: row.birth_date,
-    occupation: row.occupation,
-    education: row.education,
-    photoUrl: row.photo_url,
-    tseUrl: row.tse_url,
+    occupation: cleanStoredValue(row.occupation),
+    education: cleanStoredValue(row.education),
+    photoUrl: cleanStoredValue(row.photo_url),
+    tseUrl: cleanStoredValue(row.tse_url),
     socials,
     assets,
     source: row.source,
