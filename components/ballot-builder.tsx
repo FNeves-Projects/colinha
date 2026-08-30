@@ -767,6 +767,11 @@ function CandidatePicker({
   );
 }
 
+function profileNeedsRefresh(candidate: Candidate | undefined) {
+  if (!candidate) return true;
+  return !candidate.status || !candidate.occupation || !candidate.education;
+}
+
 function ProfileContent({
   candidate,
   detailsLoading = false,
@@ -1263,10 +1268,15 @@ export function BallotBuilder() {
     };
   }, [profile, mobilePicker]);
 
-  async function loadCandidateProfile(candidate: CandidateSummary) {
+  async function loadCandidateProfile(candidate: CandidateSummary, options?: { refresh?: boolean }) {
     const lookupId = candidateProfileLookupId(candidate);
     const cached = profileCacheRef.current.get(lookupId);
-    if (cached) return cached;
+    if (!options?.refresh && cached && !profileNeedsRefresh(cached)) return cached;
+
+    if (options?.refresh) {
+      profileCacheRef.current.delete(lookupId);
+      profileRequestsRef.current.delete(lookupId);
+    }
 
     const pending = profileRequestsRef.current.get(lookupId);
     if (pending) return pending;
@@ -1274,11 +1284,11 @@ export function BallotBuilder() {
     const request = fetch(`/api/candidates?id=${encodeURIComponent(lookupId)}`, { cache: "no-store" })
       .then(async (response) => {
         const data = await response.json() as { candidate?: Candidate };
-        if (!response.ok || !data.candidate) return null;
+        if (!response.ok || !data.candidate) return cached ?? null;
         profileCacheRef.current.set(lookupId, data.candidate);
         return data.candidate;
       })
-      .catch(() => null)
+      .catch(() => cached ?? null)
       .finally(() => {
         profileRequestsRef.current.delete(lookupId);
       });
@@ -1295,10 +1305,11 @@ export function BallotBuilder() {
     setPickerOfficeId(null);
     const lookupId = candidateProfileLookupId(candidate);
     const cached = profileCacheRef.current.get(lookupId);
-    setProfile(cached ?? candidateFromSummary(candidate));
-    setProfileDetailsLoading(!cached);
+    const placeholder = cached ?? candidateFromSummary(candidate);
+    setProfile(placeholder);
+    setProfileDetailsLoading(profileNeedsRefresh(placeholder));
 
-    void loadCandidateProfile(candidate).then((fullCandidate) => {
+    void loadCandidateProfile(candidate, { refresh: profileNeedsRefresh(placeholder) }).then((fullCandidate) => {
       if (fullCandidate) {
         setProfile((current) => {
           if (!current || candidateProfileLookupId(current) !== lookupId) return current;

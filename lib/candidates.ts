@@ -77,7 +77,8 @@ function withFixedSlotIdentity(fromDb: Candidate): Candidate {
 
 export async function getLiveTeresinha(): Promise<Candidate> {
   const fromDb = await getCandidateBySqCandidate(TERESINHA_SQ_CANDIDATE);
-  return fromDb ? withFixedSlotIdentity(fromDb) : TERESINHA;
+  const candidate = fromDb ? withFixedSlotIdentity(fromDb) : TERESINHA;
+  return hydrateCandidateDetails(candidate);
 }
 
 export function candidateProfileLookupId(summary: Pick<CandidateSummary, "id" | "sqCandidate">) {
@@ -87,17 +88,32 @@ export function candidateProfileLookupId(summary: Pick<CandidateSummary, "id" | 
 }
 
 export function candidateFromSummary(summary: CandidateSummary): Candidate {
+  const extended = summary as Partial<Candidate>;
   return {
     ...summary,
-    electionYear: 2026,
-    birthDate: null,
-    occupation: null,
-    education: null,
-    tseUrl: null,
-    socials: [],
-    assets: [],
-    sourceUpdatedAt: null,
+    electionYear: extended.electionYear ?? 2026,
+    birthDate: extended.birthDate ?? null,
+    occupation: extended.occupation ?? null,
+    education: extended.education ?? null,
+    tseUrl: extended.tseUrl ?? null,
+    socials: extended.socials ?? [],
+    assets: extended.assets ?? [],
+    sourceUpdatedAt: extended.sourceUpdatedAt ?? null,
   };
+}
+
+async function hydrateCandidateDetails(candidate: Candidate): Promise<Candidate> {
+  if (typeof window !== "undefined") return candidate;
+
+  const { candidateNeedsLiveDetails, fetchCandidateLiveDetails, mergeCandidateLiveDetails } = await import(
+    "./candidate-live-details"
+  );
+  if (!candidateNeedsLiveDetails(candidate)) return candidate;
+  const live = await fetchCandidateLiveDetails({
+    sqCandidate: candidate.sqCandidate,
+    uf: candidate.uf,
+  });
+  return mergeCandidateLiveDetails(candidate, live);
 }
 
 async function getCandidateBySqCandidate(sqCandidate: string): Promise<Candidate | null> {
@@ -327,8 +343,8 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   if (!row) return null;
   if (row.sq_candidate === TERESINHA_SQ_CANDIDATE) {
     const related = await loadRelated(row.id);
-    return withFixedSlotIdentity(mapRow(row, related.socials));
+    return hydrateCandidateDetails(withFixedSlotIdentity(mapRow(row, related.socials)));
   }
   const related = await loadRelated(row.id);
-  return mapRow(row, related.socials);
+  return hydrateCandidateDetails(mapRow(row, related.socials));
 }
