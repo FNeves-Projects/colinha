@@ -1020,6 +1020,8 @@ export function BallotBuilder() {
   const captureRef = useRef<HTMLDivElement>(null);
   const profileCacheRef = useRef(new Map<string, Candidate>());
   const profileRequestsRef = useRef(new Map<string, Promise<Candidate | null>>());
+  const ballotCaptureCacheRef = useRef<{ key: string; dataUrl: string; file: File } | null>(null);
+  const ballotCaptureTaskRef = useRef<Promise<{ key: string; dataUrl: string; file: File } | null> | null>(null);
   const refreshedSavedSelections = useRef(false);
   const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
@@ -1269,6 +1271,14 @@ export function BallotBuilder() {
     }
   }, [hydrated, selections, ticketSlates]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = window.setTimeout(() => {
+      void ensureBallotCaptureFile().catch(() => {});
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [hydrated, selections, previewTheme, showViceOnBallot, ticketSlates]);
+
   async function captureBallotImage() {
     const captureNode = captureRef.current;
     if (!captureNode) throw new Error("Colinha indisponível");
@@ -1344,16 +1354,54 @@ export function BallotBuilder() {
     return new File([blob], pngFileName(), { type: "image/png" });
   }
 
-  async function copyImageToClipboard(dataUrl: string) {
-    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") return false;
-    try {
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      return true;
-    } catch {
-      return false;
+  function ballotCaptureKey() {
+    return JSON.stringify({
+      selections,
+      previewTheme,
+      showViceOnBallot,
+      ticketSlates,
+    });
+  }
+
+  async function ensureBallotCaptureFile() {
+    const key = ballotCaptureKey();
+    const cached = ballotCaptureCacheRef.current;
+    if (cached?.key === key) return cached;
+
+    if (ballotCaptureTaskRef.current) {
+      const pending = await ballotCaptureTaskRef.current;
+      if (pending?.key === key) return pending;
     }
+
+    const task = (async () => {
+      const dataUrl = await captureBallotImage();
+      const file = await createPngFile(dataUrl);
+      const entry = { key, dataUrl, file };
+      ballotCaptureCacheRef.current = entry;
+      return entry;
+    })();
+
+    ballotCaptureTaskRef.current = task;
+    try {
+      return await task;
+    } finally {
+      ballotCaptureTaskRef.current = null;
+    }
+  }
+
+  async function shareImageFileOnly(file: File) {
+    const attempts: ShareData[] = [
+      { files: [file] },
+      { files: [file], title: "Minha colinha 2026" },
+    ];
+
+    for (const payload of attempts) {
+      if (navigator.canShare && !navigator.canShare(payload)) continue;
+      await navigator.share(payload);
+      return true;
+    }
+
+    return false;
   }
 
   async function buildPdfFromImage(image: string) {
@@ -1412,26 +1460,11 @@ export function BallotBuilder() {
     return "saved" as const;
   }
 
-  function openWhatsAppShare(text: string) {
-    const encoded = encodeURIComponent(text);
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const url = isMobile
-      ? `https://wa.me/?text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-    const link = document.createElement("a");
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }
-
   async function saveBallot() {
     setWorking("save");
     try {
-      const dataUrl = await captureBallotImage();
-      const result = await savePngToDevice(dataUrl);
+      const capture = await ensureBallotCaptureFile();
+      const result = await savePngToDevice(capture.dataUrl);
       setNotice(
         result === "shared"
           ? "Escolha \"Salvar imagem\" ou \"Arquivos\" para guardar no aparelho."
@@ -1462,23 +1495,25 @@ export function BallotBuilder() {
   async function shareBallotOnWhatsApp() {
     setWorking("whatsapp");
     try {
-      const shareText = buildBallotShareText();
-      const dataUrl = await captureBallotImage();
-      const copied = await copyImageToClipboard(dataUrl);
+      const capture = await ensureBallotCaptureFile();
 
-      openWhatsAppShare(
-        copied
-          ? `${shareText}\n\n(Cole a imagem da colinha no chat.)`
-          : shareText,
-      );
+      if (typeof navigator.share !== "function") {
+        await downloadPngBlob(capture.dataUrl);
+        setNotice("PNG salvo. Abra o WhatsApp e anexe a imagem manualmente.");
+        return;
+      }
 
-      setNotice(
-        copied
-          ? "WhatsApp aberto. Toque e segure no chat para colar a imagem."
-          : "WhatsApp aberto. Use Salvar PNG se quiser anexar a imagem.",
-      );
-    } catch {
-      setNotice("Não foi possível abrir o WhatsApp agora.");
+      const shared = await shareImageFileOnly(capture.file);
+      if (shared) {
+        setNotice("Escolha WhatsApp — a imagem vai anexada, sem texto.");
+        return;
+      }
+
+      await downloadPngBlob(capture.dataUrl);
+      setNotice("PNG salvo. Abra o WhatsApp e anexe a imagem manualmente.");
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return;
+      setNotice("Não foi possível compartilhar no WhatsApp agora.");
     } finally {
       setWorking(null);
     }
