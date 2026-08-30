@@ -319,6 +319,7 @@ export function BallotBuilder() {
   const [working, setWorking] = useState<"save" | "share" | null>(null);
   const [notice, setNotice] = useState("");
   const ballotRef = useRef<HTMLDivElement>(null);
+  const refreshedSavedSelections = useRef(false);
 
   useEffect(() => {
     try {
@@ -335,6 +336,61 @@ export function BallotBuilder() {
     }
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || refreshedSavedSelections.current) return;
+    refreshedSavedSelections.current = true;
+
+    const refreshableOffices = OFFICES.filter((office) => {
+      const candidate = selections[office.id];
+      return candidate && !office.fixed && candidate.id !== TERESINHA.id;
+    });
+    if (!refreshableOffices.length) return;
+
+    let cancelled = false;
+    void Promise.all(
+      refreshableOffices.map(async (office) => {
+        const savedCandidate = selections[office.id];
+        if (!savedCandidate) return null;
+
+        try {
+          const response = await fetch(`/api/candidates?id=${encodeURIComponent(savedCandidate.id)}`, {
+            cache: "no-store",
+          });
+          const data = await response.json();
+          if (!response.ok || !data.candidate) return null;
+
+          return {
+            officeId: office.id,
+            savedCandidateId: savedCandidate.id,
+            candidate: sanitizeCandidateSummary(data.candidate as CandidateSummary),
+          };
+        } catch {
+          return null;
+        }
+      }),
+    ).then((updates) => {
+      if (cancelled) return;
+
+      setSelections((current) => {
+        let changed = false;
+        const next = { ...current };
+
+        for (const update of updates) {
+          if (!update) continue;
+          if (current[update.officeId]?.id !== update.savedCandidateId) continue;
+          next[update.officeId] = update.candidate;
+          changed = true;
+        }
+
+        return changed ? next : current;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, selections]);
 
   useEffect(() => {
     if (!hydrated) return;
