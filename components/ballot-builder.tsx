@@ -11,6 +11,7 @@ import {
   Info,
   LockKeyhole,
   Moon,
+  Printer,
   Save,
   Search,
   Share,
@@ -341,145 +342,6 @@ function OfficeCardFace({
   );
 }
 
-function BallotShareCandidateRow({
-  office,
-  candidate,
-  officeLabel,
-  showViceOnBallot,
-  slate,
-}: {
-  office: Office;
-  candidate: CandidateSummary;
-  officeLabel: string;
-  showViceOnBallot: boolean;
-  slate?: CandidateSummary[];
-}) {
-  const vice = showViceOnBallot ? previewViceCandidate(office, slate) : null;
-  const fixedProps = office.fixed ? fixedSlotRowProps(candidate.partyAcronym) : null;
-  return (
-    <div className={`ballot-share-row${fixedProps?.className ?? ""}`} style={fixedProps?.style}>
-      <div className={`ballot-share-photo-stack${vice ? " is-duo" : ""}`}>
-        <div className="ballot-share-photo-main">
-          <CandidatePhoto candidate={candidate} className="candidate-photo ballot-share-head-photo" size={68} />
-        </div>
-        {vice ? (
-          <CandidatePhoto candidate={vice} className="candidate-photo ballot-share-vice-photo" size={52} />
-        ) : null}
-      </div>
-      <div className="ballot-share-main">
-        <div className="ballot-row-heading">
-          <span className="ballot-share-office">{officeLabel}</span>
-        </div>
-        <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
-        <div className="ballot-row-names">
-          <strong className="ballot-share-name">{candidate.ballotName}</strong>
-          {vice ? (
-            <>
-              <span className="ballot-row-names-divider" aria-hidden="true" />
-              <span className="ballot-row-vice-name ballot-share-vice-name">{vice.ballotName}</span>
-            </>
-          ) : null}
-        </div>
-      </div>
-      <div className="ballot-share-side">
-        <PartyBadge acronym={candidate.partyAcronym} variant="share" />
-      </div>
-    </div>
-  );
-}
-
-function BallotShareRow({
-  office,
-  selection,
-  showViceOnBallot,
-  slate,
-}: {
-  office: Office;
-  selection: OfficeSelection;
-  showViceOnBallot: boolean;
-  slate?: CandidateSummary[];
-}) {
-  const officeLabel = previewOfficeLabel(office.id, office.label);
-
-  if (!selection) {
-    return (
-      <div className="ballot-share-row ballot-share-row-empty">
-        <div className="ballot-share-main">
-          <span className="ballot-share-office">{officeLabel}</span>
-          <span className="ballot-share-pending">—</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (selection.type === "special") {
-    return (
-      <div className="ballot-share-row ballot-share-row-empty">
-        <div className="ballot-share-main">
-          <span className="ballot-share-office">{officeLabel}</span>
-          {selection.vote === "branco" ? (
-            <span className="ballot-blank-pill ballot-blank-pill-share">BRANCO</span>
-          ) : (
-            <>
-              <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
-              <strong className="ballot-share-name ballot-share-special">NULO</strong>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <BallotShareCandidateRow
-      office={office}
-      candidate={selection.candidate}
-      officeLabel={officeLabel}
-      showViceOnBallot={showViceOnBallot}
-      slate={slate}
-    />
-  );
-}
-
-function BallotShareSheet({
-  selections,
-  ticketSlates,
-  duplicateSenator,
-  showViceOnBallot,
-}: {
-  selections: Selections;
-  ticketSlates: Record<string, CandidateSummary[]>;
-  duplicateSenator: boolean;
-  showViceOnBallot: boolean;
-}) {
-  return (
-    <div className="ballot-share-capture" aria-hidden="true">
-      <div className="ballot-share-frame">
-        <div className="ballot-share-sheet">
-          <p className="ballot-share-meta">{BALLOT_META_LABEL}</p>
-          <div className="ballot-share-rows">
-            {OFFICES.map((office) => (
-              <BallotShareRow
-                key={office.id}
-                office={office}
-                selection={selections[office.id]}
-                showViceOnBallot={showViceOnBallot}
-                slate={ticketSlates[office.id]}
-              />
-            ))}
-          </div>
-          {duplicateSenator && (
-            <p className="ballot-share-warning">Atenção: escolha números diferentes para as duas vagas de senador.</p>
-          )}
-          <p className="ballot-share-footer">
-            Monte a sua em <strong>colinha.2026</strong>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function WhatsAppIcon({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -640,14 +502,21 @@ function EmptyOfficeSlot({
 }) {
   return (
     <article className={`office-card empty-slot${isActive ? " is-picking" : ""}`}>
-      <button type="button" className="empty-slot-button" onClick={onOpen}>
+      <button
+        type="button"
+        className="empty-slot-button"
+        onClick={onOpen}
+        aria-label={`Escolher candidato para ${office.label}`}
+      >
         <span className="empty-photo" aria-hidden="true"><Search size={20} /></span>
         <span className="office-card-copy">
           <span className="office-card-heading">{office.label}</span>
-          <strong>Escolher candidato</strong>
-          <small>Busque, filtre por partido ou escolha branco/nulo</small>
+          <strong className="empty-slot-cta">Escolher candidato</strong>
+          <small className="empty-slot-hint">
+            Busque, filtre por partido ou escolha branco/nulo
+          </small>
         </span>
-        <span className="selected-number">
+        <span className="selected-number empty-slot-numbers">
           <NumberBoxes digits={office.digits} />
         </span>
       </button>
@@ -856,12 +725,11 @@ export function BallotBuilder() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">("light");
   const [showViceOnBallot, setShowViceOnBallot] = useState(false);
-  const [working, setWorking] = useState<"save" | "share" | "whatsapp" | null>(null);
+  const [working, setWorking] = useState<"save" | "share" | "whatsapp" | "print" | null>(null);
   const [notice, setNotice] = useState("");
   const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
   const [mobilePicker, setMobilePicker] = useState(false);
   const ballotRef = useRef<HTMLDivElement>(null);
-  const shareRef = useRef<HTMLDivElement>(null);
   const refreshedSavedSelections = useRef(false);
   const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
@@ -1066,25 +934,45 @@ export function BallotBuilder() {
     }
   }
 
-  async function buildPdf() {
-    const captureNode = shareRef.current;
+  async function captureBallotImage() {
+    const captureNode = ballotRef.current;
     if (!captureNode) throw new Error("Colinha indisponível");
     await new Promise((resolve) => window.setTimeout(resolve, 120));
-    const image = await toPng(captureNode, {
+    return toPng(captureNode, {
       cacheBust: true,
       pixelRatio: 2,
-      backgroundColor: "#0d0f14",
+      backgroundColor: previewTheme === "dark" ? "#0d0f14" : "#ffffff",
     });
+  }
+
+  function pngFileName() {
+    return `minha-colinha-2026-${new Date().toISOString().slice(0, 10)}.png`;
+  }
+
+  function pdfFileName() {
+    return `minha-colinha-2026-${new Date().toISOString().slice(0, 10)}.pdf`;
+  }
+
+  function downloadPng(dataUrl: string) {
+    const link = document.createElement("a");
+    link.download = pngFileName();
+    link.href = dataUrl;
+    link.click();
+  }
+
+  async function createPngFile(dataUrl: string) {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return new File([blob], pngFileName(), { type: "image/png" });
+  }
+
+  async function buildPdfFromImage(image: string) {
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const properties = pdf.getImageProperties(image);
     const pageWidth = 190;
     const height = (properties.height * pageWidth) / properties.width;
     pdf.addImage(image, "PNG", 10, 10, pageWidth, Math.min(height, 277));
     return pdf;
-  }
-
-  function fileName() {
-    return `minha-colinha-2026-${new Date().toISOString().slice(0, 10)}.pdf`;
   }
 
   function buildBallotShareText() {
@@ -1101,15 +989,17 @@ export function BallotBuilder() {
   }
 
   async function createPdfFile() {
-    const pdf = await buildPdf();
+    const image = await captureBallotImage();
+    const pdf = await buildPdfFromImage(image);
     return {
       pdf,
-      file: new File([pdf.output("blob")], fileName(), { type: "application/pdf" }),
+      file: new File([pdf.output("blob")], pdfFileName(), { type: "application/pdf" }),
     };
   }
 
-  async function sharePdfFile(shareText: string) {
-    const { pdf, file } = await createPdfFile();
+  async function sharePngFile(shareText: string) {
+    const dataUrl = await captureBallotImage();
+    const file = await createPngFile(dataUrl);
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({
         files: [file],
@@ -1118,7 +1008,7 @@ export function BallotBuilder() {
       });
       return "shared" as const;
     }
-    pdf.save(fileName());
+    downloadPng(dataUrl);
     return "saved" as const;
   }
 
@@ -1130,9 +1020,9 @@ export function BallotBuilder() {
   async function saveBallot() {
     setWorking("save");
     try {
-      const { pdf } = await createPdfFile();
-      pdf.save(fileName());
-      setNotice("Sua colinha foi salva em PDF.");
+      const dataUrl = await captureBallotImage();
+      downloadPng(dataUrl);
+      setNotice("Sua colinha foi salva em PNG.");
     } catch {
       setNotice("Não foi possível salvar agora. Tente novamente.");
     } finally {
@@ -1143,11 +1033,11 @@ export function BallotBuilder() {
   async function shareBallot() {
     setWorking("share");
     try {
-      const result = await sharePdfFile(buildBallotShareText());
-      setNotice(result === "shared" ? "Colinha compartilhada." : "PDF salvo. Anexe o arquivo para enviar.");
+      const result = await sharePngFile(buildBallotShareText());
+      setNotice(result === "shared" ? "Colinha compartilhada." : "PNG salvo. Anexe o arquivo para enviar.");
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
-        setNotice("Não foi possível compartilhar agora. Tente salvar o PDF.");
+        setNotice("Não foi possível compartilhar agora. Tente salvar o PNG.");
       }
     } finally {
       setWorking(null);
@@ -1157,17 +1047,36 @@ export function BallotBuilder() {
   async function shareBallotOnWhatsApp() {
     setWorking("whatsapp");
     try {
-      const result = await sharePdfFile("Minha colinha 2026 — São Paulo");
+      const result = await sharePngFile("Minha colinha 2026 — São Paulo");
       if (result === "shared") {
-        setNotice("Escolha WhatsApp para enviar o PDF.");
+        setNotice("Escolha WhatsApp para enviar a imagem.");
       } else {
-        setNotice("PDF salvo. Abra o WhatsApp e anexe o arquivo baixado.");
-        openWhatsAppShare("Minha colinha 2026 — anexe o PDF que acabei de salvar.");
+        setNotice("PNG salvo. Abra o WhatsApp e anexe a imagem baixada.");
+        openWhatsAppShare("Minha colinha 2026 — anexe a imagem que acabei de salvar.");
       }
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
-        setNotice("Não foi possível compartilhar o PDF agora. Tente salvar a colinha.");
+        setNotice("Não foi possível compartilhar a imagem agora. Tente salvar a colinha.");
       }
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function printBallot() {
+    setWorking("print");
+    try {
+      const { pdf } = await createPdfFile();
+      pdf.autoPrint();
+      const printWindow = window.open(pdf.output("bloburl"), "_blank");
+      if (!printWindow) {
+        pdf.save(pdfFileName());
+        setNotice("PDF salvo. Abra o arquivo para imprimir.");
+        return;
+      }
+      setNotice("PDF aberto para impressão.");
+    } catch {
+      setNotice("Não foi possível imprimir agora. Tente novamente.");
     } finally {
       setWorking(null);
     }
@@ -1319,7 +1228,7 @@ export function BallotBuilder() {
               <div className="action-buttons">
                 <button className="save-button" type="button" onClick={saveBallot} disabled={working !== null}>
                   {working === "save" ? <span className="button-spinner" /> : <Save size={18} strokeWidth={2.2} />}
-                  Salvar colinha
+                  Salvar arquivo
                 </button>
                 <button className="share-button" type="button" onClick={shareBallot} disabled={working !== null}>
                   {working === "share" ? <span className="button-spinner" /> : <Share size={18} strokeWidth={2.2} />}
@@ -1335,6 +1244,15 @@ export function BallotBuilder() {
                   {working === "whatsapp" ? <span className="button-spinner" /> : <WhatsAppIcon size={26} />}
                 </button>
               </div>
+              <button
+                className="print-button"
+                type="button"
+                onClick={printBallot}
+                disabled={working !== null}
+              >
+                {working === "print" ? <span className="button-spinner" /> : <Printer size={18} strokeWidth={2.2} />}
+                Imprimir
+              </button>
               <button
                 className="clear-ballot-button"
                 type="button"
@@ -1362,15 +1280,6 @@ export function BallotBuilder() {
           onInspectMate={inspectCandidate}
         />
       )}
-
-      <div ref={shareRef}>
-        <BallotShareSheet
-          selections={selections}
-          ticketSlates={ticketSlates}
-          duplicateSenator={duplicateSenator}
-          showViceOnBallot={showViceOnBallot}
-        />
-      </div>
 
       {showModalPicker && pickerOffice && (
         <CandidatePickerPanel

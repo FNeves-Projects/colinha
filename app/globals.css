@@ -14,9 +14,10 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: clip; }
 body {
   margin: 0;
+  overflow-x: clip;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-inter), Arial, sans-serif;
@@ -1139,6 +1140,36 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 .whatsapp-link:disabled { opacity: .65; cursor: wait; transform: none; }
+.print-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 47px;
+  margin-top: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 850;
+  font-size: 11px;
+  box-shadow:
+    0 8px 22px rgba(16, 24, 40, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: transform .15s, box-shadow .15s, border-color .15s, background .15s;
+}
+.print-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 26px rgba(16, 24, 40, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.print-button:disabled { opacity: .65; cursor: wait; transform: none; }
+.print-button .button-spinner { border-color: rgba(23,55,127,.18); border-top-color: var(--blue); }
 .save-button {
   color: var(--blue-dark);
   background: rgba(231, 237, 251, 0.78);
@@ -1211,8 +1242,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   transition: background .15s, transform .15s;
 }
 .empty-slot-button:hover { background: #f9fbff; transform: translateY(-1px); }
-.empty-slot .office-card-copy > strong { display: block; font-size: 15px; }
-.empty-slot .office-card-copy > small { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+.empty-slot .office-card-copy > .empty-slot-cta { display: block; font-size: 15px; }
+.empty-slot .office-card-copy > .empty-slot-hint { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+.empty-slot-button .office-card-copy { flex: 1; min-width: 0; }
+.empty-slot-numbers { align-self: center; }
 
 .picker-panel {
   display: flex;
@@ -1539,7 +1572,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 
 @media (max-width: 620px) {
   .hero { min-height: 390px; }
-  .hero-nav, .hero-content { width: calc(100% - 30px); }
+  .hero-nav, .hero-content { width: calc(100% - 24px); }
   .hero-nav { padding-top: 17px; }
   .sound-toggle { width: 39px; height: 39px; padding: 0; justify-content: center; }
   .sound-toggle { font-size: 0; }
@@ -1548,8 +1581,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .hero-lead { font-size: 14px; }
   .trust-row { gap: 9px 14px; }
   .trust-row span { font-size: 10px; }
-  .app-shell { margin-top: -30px; }
-  .builder-panel, .preview-panel { padding: 18px; border-radius: 18px; }
+  .app-shell {
+    width: calc(100% - 24px);
+    margin-top: -30px;
+  }
+  .builder-panel, .preview-panel {
+    padding: 16px;
+    border-radius: 18px;
+    overflow: hidden;
+  }
   .section-heading { align-items: center; }
   .section-heading p { display: none; }
   .office-card { min-height: 82px; padding: 10px; }
@@ -1559,49 +1599,102 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .selected-number .number-box { width: 22px; height: 30px; font-size: 13px; }
   .search-card { align-items: center; }
   .search-copy > .number-boxes { display: none; }
-  .ballot-frame { margin-inline: -8px; padding: 5px; }
-  .ballot-paper { padding: 13px; }
-  .ballot-sheet { padding: 12px 10px 10px; }
-  .ballot-row {
-    grid-template-columns: 56px minmax(0, 1fr) 56px;
-    gap: 8px;
-    padding: 12px 0;
+  .ballot-frame {
+    margin-inline: 0;
+    padding: 6px;
+    border-radius: 14px;
   }
+  .ballot-frame--dark { padding: 6px; }
+  .ballot-paper { padding: 10px; border-radius: 8px; }
+  .ballot-sheet { padding: 8px 6px 6px; }
+  .ballot-sheet-meta {
+    margin-bottom: 8px;
+    font-size: 9px;
+  }
+  .ballot-sheet-footer {
+    margin-top: 8px;
+    padding-top: 8px;
+    font-size: 9px;
+  }
+  .ballot-row {
+    grid-template-columns: 48px minmax(0, 1fr) 44px;
+    gap: 6px;
+    padding: 10px 0;
+  }
+  .ballot-row.is-fixed-slot,
+  .ballot-share-row.is-fixed-slot {
+    margin-inline: 0;
+    padding-inline: 4px;
+    border-radius: 12px;
+  }
+  .ballot-row-photo { height: 56px; }
   .party-badge {
-    width: 48px;
-    gap: 5px;
+    width: 42px;
+    gap: 4px;
   }
   .party-badge-logo,
   .party-badge-mark {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
   }
   .party-badge-logo img {
-    border-radius: 8px;
-  }
-  .party-badge-mark {
-    font-size: 8px;
-    border-radius: 12px;
-  }
-  .party-badge-label {
-    max-width: 48px;
-    font-size: 8px;
-  }
-  .ballot-row-photo-main,
-  .ballot-row-photo .candidate-photo:not(.ballot-vice-photo) { width: 52px; height: 52px; border-radius: 8px; }
-  .ballot-row-photo.is-duo .ballot-vice-photo {
-    left: calc((100% - 52px) / 2 + 52px + 4px);
-    width: 40px !important;
-    height: 48px !important;
     border-radius: 7px;
   }
-  .ballot-row .number-box { width: 22px; height: 30px; font-size: 14px; border-radius: 6px; }
-  .ballot-row-names { font-size: 11px; }
+  .party-badge-mark {
+    font-size: 7px;
+    border-radius: 10px;
+  }
+  .party-badge-label {
+    max-width: 42px;
+    font-size: 7px;
+    line-height: 1.1;
+  }
+  .ballot-row-photo-main,
+  .ballot-row-photo .candidate-photo:not(.ballot-vice-photo) {
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+  }
+  .ballot-row-photo.is-duo .ballot-vice-photo {
+    left: calc((100% - 46px) / 2 + 46px + 3px);
+    width: 34px !important;
+    height: 40px !important;
+    border-radius: 6px;
+  }
+  .ballot-row .number-box {
+    width: 20px;
+    height: 28px;
+    font-size: 12px;
+    border-radius: 5px;
+  }
+  .ballot-row-office { font-size: 8px; letter-spacing: .06em; }
+  .ballot-row-names { font-size: 10px; }
+  .ballot-row-names-divider { width: min(100%, 56px); }
   .ballot-blank-pill { min-width: 96px; height: 34px; font-size: 12px; }
+  .preview-options { gap: 6px; }
+  .preview-option-btn {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 10px;
+  }
+  .action-buttons { gap: 8px; }
   .action-buttons .save-button,
-  .action-buttons .share-button { min-height: 50px; }
-  .site-footer { width: calc(100% - 30px); flex-direction: column; align-items: flex-start; padding: 35px 0; }
+  .action-buttons .share-button {
+    min-height: 46px;
+    font-size: 10px;
+  }
+  .whatsapp-link {
+    flex: 0 0 46px;
+    width: 46px;
+    height: 46px;
+  }
+  .print-button {
+    min-height: 46px;
+    margin-top: 8px;
+    font-size: 10px;
+  }
+  .site-footer { width: calc(100% - 24px); flex-direction: column; align-items: flex-start; padding: 35px 0; }
   .site-footer p { text-align: left; }
   .profile-drawer { padding: 27px 20px; }
   .profile-head h2 { font-size: 20px; }
@@ -1609,10 +1702,18 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .picker-toolbar { padding: 12px 16px; }
   .picker-results { padding-inline: 10px; }
   .picker-vote-options { padding: 12px 16px 18px; }
-  .empty-slot-button { min-height: 82px; padding: 10px; }
+  .empty-slot-button { min-height: 82px; padding: 10px; gap: 10px; }
+  .empty-slot .office-card-copy > .empty-slot-cta,
+  .empty-slot .office-card-copy > .empty-slot-hint { display: none; }
+  .empty-slot .office-card-heading { margin-bottom: 0; }
+  .empty-slot-numbers .number-box {
+    width: 20px;
+    height: 28px;
+    font-size: 12px;
+  }
 }
 
 @media print {
-  .hero, .builder-panel, .section-heading, .action-buttons, .privacy-note, .notice, .site-footer { display: none !important; }
+  .hero, .builder-panel, .section-heading, .action-buttons, .print-button, .privacy-note, .notice, .site-footer { display: none !important; }
   body, .app-shell, .preview-panel, .ballot-frame { margin: 0; padding: 0; border: 0; box-shadow: none; background: white; }
 }
