@@ -219,6 +219,8 @@ function collectBallotPhotoUrls(
     const selection = selections[office.id];
     if (selection?.type !== "candidate") continue;
     if (selection.candidate.photoUrl) urls.add(selection.candidate.photoUrl);
+    const logo = partyLogoUrl(selection.candidate.partyAcronym);
+    if (logo) urls.add(logo);
     if (showViceOnBallot) {
       const vice = previewViceCandidate(office, ticketSlates[office.id]);
       if (vice?.photoUrl) urls.add(vice.photoUrl);
@@ -227,16 +229,22 @@ function collectBallotPhotoUrls(
   return [...urls];
 }
 
+function resolveImageUrl(url: string) {
+  if (url.startsWith("/")) return `${window.location.origin}${url}`;
+  return url;
+}
+
 async function preloadImageUrls(urls: string[]) {
   await Promise.all(
     urls.map(
       (url) =>
         new Promise<void>((resolve) => {
           const img = new Image();
-          if (url.startsWith("http")) img.crossOrigin = "anonymous";
+          const resolved = resolveImageUrl(url);
+          if (resolved.startsWith("http")) img.crossOrigin = "anonymous";
           img.onload = () => resolve();
           img.onerror = () => resolve();
-          img.src = url;
+          img.src = resolved;
         }),
     ),
   );
@@ -529,17 +537,11 @@ function SelectedOfficeCard({
     [candidate, members, office.label],
   );
   const [activeIndex, setActiveIndex] = useState(0);
-  const [fanExpanded, setFanExpanded] = useState(false);
   const [canHover, setCanHover] = useState(false);
 
   useEffect(() => {
     setActiveIndex(0);
-    setFanExpanded(false);
   }, [candidate.id, members.map((member) => member.id).join(",")]);
-
-  useEffect(() => {
-    if (isActive) setFanExpanded(false);
-  }, [isActive]);
 
   useEffect(() => {
     const media = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -555,19 +557,6 @@ function SelectedOfficeCard({
   function focusPerson(index: number) {
     setActiveIndex(index);
     onInspect?.(roster[index].person);
-  }
-
-  function handlePersonAction(index: number) {
-    if (members.length > 0 && !fanExpanded && !canHover) {
-      setFanExpanded(true);
-      return;
-    }
-    focusPerson(index);
-  }
-
-  function handleFrontInspect(selected: CandidateSummary) {
-    const personIndex = roster.findIndex((entry) => entry.person.id === selected.id);
-    handlePersonAction(personIndex >= 0 ? personIndex : 0);
   }
 
   if (!members.length) {
@@ -586,13 +575,43 @@ function SelectedOfficeCard({
     );
   }
 
+  if (!canHover) {
+    return (
+      <div className={`office-card-chapa${isActive ? " is-picking" : ""}`}>
+        <div
+          className="office-card-chapa-track"
+          role="list"
+          aria-label={`Chapa de ${candidate.ballotName}`}
+        >
+          {roster.map((entry, index) => (
+            <article
+              key={entry.person.id}
+              className={cardClass(" office-card-chapa-slide")}
+              role="listitem"
+            >
+              <OfficeCardFace
+                office={office}
+                candidate={entry.person}
+                headingLabel={entry.label}
+                ballotNumber={candidate.ballotNumber}
+                fixed={office.fixed}
+                onInspect={onInspect}
+                onSwap={index === 0 && !office.fixed ? onSwap : undefined}
+              />
+            </article>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const orderedIndices = [
     activeIndex,
     ...roster.map((_, index) => index).filter((index) => index !== activeIndex),
   ];
 
   return (
-    <div className={`office-card-fan office-card-fan--deck${isActive ? " is-picking" : ""}${fanExpanded ? " is-expanded" : ""}`}>
+    <div className={`office-card-fan office-card-fan--deck${isActive ? " is-picking" : ""}`}>
       {orderedIndices.map((personIndex, rank) => {
         const entry = roster[personIndex];
         const isFront = rank === 0;
@@ -610,7 +629,7 @@ function SelectedOfficeCard({
               headingLabel={entry.label}
               ballotNumber={candidate.ballotNumber}
               fixed={office.fixed}
-              onInspect={isFront ? handleFrontInspect : undefined}
+              onInspect={isFront ? onInspect : undefined}
               onSwap={isFront && !office.fixed ? onSwap : undefined}
             />
             {!isFront && (
@@ -619,7 +638,7 @@ function SelectedOfficeCard({
                 className="office-card-fan__pick"
                 onClick={(event) => {
                   event.stopPropagation();
-                  handlePersonAction(personIndex);
+                  focusPerson(personIndex);
                 }}
                 aria-label={`Ver ${entry.label} de ${candidate.ballotName}`}
               />
@@ -870,6 +889,7 @@ export function BallotBuilder() {
   const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
   const [mobilePicker, setMobilePicker] = useState(false);
   const ballotRef = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
   const refreshedSavedSelections = useRef(false);
   const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
@@ -1075,18 +1095,27 @@ export function BallotBuilder() {
   }
 
   async function captureBallotImage() {
-    const captureNode = ballotRef.current;
+    const captureNode = captureRef.current;
     if (!captureNode) throw new Error("Colinha indisponível");
 
-    captureNode.scrollIntoView({ block: "center" });
     await preloadImageUrls(collectBallotPhotoUrls(selections, ticketSlates, showViceOnBallot));
-    await new Promise((resolve) => window.setTimeout(resolve, 200));
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+    });
     await waitForBallotImages(captureNode);
+
+    const width = captureNode.offsetWidth;
+    const height = captureNode.offsetHeight;
+    if (!width || !height) throw new Error("Colinha indisponível para exportar");
 
     return toPng(captureNode, {
       cacheBust: true,
       pixelRatio: 2,
-      backgroundColor: previewTheme === "dark" ? "#0d0f14" : "#ffffff",
+      width,
+      height,
+      canvasWidth: width * 2,
+      canvasHeight: height * 2,
+      backgroundColor: previewTheme === "dark" ? "#151820" : "#e7eaf0",
       includeQueryParams: true,
       fetchRequestInit: { mode: "cors", cache: "no-cache" },
     });
@@ -1158,9 +1187,19 @@ export function BallotBuilder() {
   async function buildPdfFromImage(image: string) {
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const properties = pdf.getImageProperties(image);
-    const pageWidth = 190;
-    const height = (properties.height * pageWidth) / properties.width;
-    pdf.addImage(image, "PNG", 10, 10, pageWidth, Math.min(height, 277));
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const maxWidth = pageWidth - margin * 2;
+    const maxHeight = pageHeight - margin * 2;
+    let width = maxWidth;
+    let height = (properties.height * width) / properties.width;
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = (properties.width * height) / properties.height;
+    }
+    const x = (pageWidth - width) / 2;
+    pdf.addImage(image, "PNG", x, margin, width, height);
     return pdf;
   }
 
@@ -1501,6 +1540,23 @@ export function BallotBuilder() {
           onClearCurrent={() => clearOffice(pickerOffice.id)}
         />
       )}
+
+      <div className="ballot-export-capture" aria-hidden="true">
+        <div
+          ref={captureRef}
+          className={`ballot-frame ballot-export-frame${previewTheme === "dark" ? " ballot-frame--dark" : ""}`}
+        >
+          <div className={`ballot-paper ballot-sheet${previewTheme === "dark" ? " ballot-preview-dark" : ""}`}>
+            <BallotSheetContent
+              selections={selections}
+              showViceOnBallot={showViceOnBallot}
+              ticketSlates={ticketSlates}
+              duplicateSenator={duplicateSenator}
+              imagePriority
+            />
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

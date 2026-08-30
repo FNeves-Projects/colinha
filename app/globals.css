@@ -376,6 +376,35 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-weight: 900;
 }
 .office-list { display: grid; gap: 10px; }
+.office-card-chapa {
+  position: relative;
+  z-index: 0;
+  margin-inline: -13px;
+}
+.office-card-chapa.is-picking {
+  z-index: 5;
+}
+.office-card-chapa-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-inline: 13px;
+  padding: 2px 13px 6px;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+.office-card-chapa-track::-webkit-scrollbar {
+  display: none;
+}
+.office-card-chapa-slide {
+  flex: 0 0 calc(100% - 26px);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  min-width: 0;
+}
 .office-card-fan {
   position: relative;
   z-index: 0;
@@ -394,15 +423,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   z-index: 5;
   --fan-x: var(--peek-x);
   --fan-a: 1.1deg;
-}
-.office-card-fan--deck.is-expanded {
-  z-index: 5;
-  --fan-x: var(--open-x);
-  --fan-y: 0px;
-  --fan-a: 2deg;
-  --fan-rest-x: 0px;
-  --fan-rest-a: 0deg;
-  --fan-shadow: 0 0 12px rgba(17, 17, 17, 0.12), 0 18px 36px rgba(17, 17, 17, 0.08);
 }
 @media (hover: hover) and (pointer: fine) {
   .office-card-fan--deck:hover {
@@ -425,9 +445,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     box-shadow: inset 0 0 0 1px var(--blue);
   }
 }
-.office-card-fan--deck.is-expanded .office-card-fan__card:not([data-rank="0"]) {
-  pointer-events: auto;
-}
 .office-card-fan__card {
   transform-origin: 100% 100%;
   transform:
@@ -447,9 +464,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   position: absolute;
   inset: 0;
   pointer-events: none;
-}
-.office-card-fan--deck.is-expanded .office-card-fan__card:not([data-rank="0"]) {
-  pointer-events: auto;
 }
 @media (hover: hover) and (pointer: fine) {
   .office-card-fan--deck.is-picking .office-card-fan__card:not([data-rank="0"]),
@@ -885,13 +899,36 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .ballot-row-special { color: #667085; }
 
-.ballot-share-capture {
+.ballot-share-capture,
+.ballot-export-capture {
   position: fixed;
   left: -10000px;
   top: 0;
   width: 420px;
   pointer-events: none;
-  opacity: 0;
+  z-index: -1;
+}
+.ballot-export-frame {
+  overflow: visible;
+  width: 420px;
+  box-sizing: border-box;
+  padding: 10px;
+  border-radius: 18px;
+}
+.ballot-export-capture .ballot-paper {
+  width: 100%;
+  box-sizing: border-box;
+}
+.ballot-export-capture .ballot-row-photo.is-duo {
+  overflow: visible;
+}
+.ballot-export-capture .ballot-row.is-fixed-slot {
+  background: linear-gradient(135deg, #edf3ff, #f9fbff);
+  box-shadow: inset 0 0 0 1px #94afe8;
+}
+.ballot-export-capture .ballot-preview-dark .ballot-row.is-fixed-slot {
+  background: linear-gradient(135deg, #152238, #0d0f14);
+  box-shadow: inset 0 0 0 1px rgba(148, 175, 232, 0.45);
 }
 .ballot-share-frame {
   overflow: hidden;
@@ -1646,79 +1683,79 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .selected-number .number-box { width: 22px; height: 30px; font-size: 13px; }
   .search-card { align-items: center; }
   .search-copy > .number-boxes { display: none; }
-  .ballot-frame {
+  .preview-panel .ballot-frame {
     margin-inline: 0;
     padding: 6px;
     border-radius: 14px;
   }
-  .ballot-frame--dark { padding: 6px; }
-  .ballot-paper { padding: 10px; border-radius: 8px; }
-  .ballot-sheet { padding: 8px 6px 6px; }
-  .ballot-sheet-meta {
+  .preview-panel .ballot-frame--dark { padding: 6px; }
+  .preview-panel .ballot-paper { padding: 10px; border-radius: 8px; }
+  .preview-panel .ballot-sheet { padding: 8px 6px 6px; }
+  .preview-panel .ballot-sheet-meta {
     margin-bottom: 8px;
     font-size: 9px;
   }
-  .ballot-sheet-footer {
+  .preview-panel .ballot-sheet-footer {
     margin-top: 8px;
     padding-top: 8px;
     font-size: 9px;
   }
-  .ballot-row {
+  .preview-panel .ballot-row {
     grid-template-columns: 48px minmax(0, 1fr) 44px;
     gap: 6px;
     padding: 10px 0;
   }
-  .ballot-row.is-fixed-slot,
-  .ballot-share-row.is-fixed-slot {
+  .preview-panel .ballot-row.is-fixed-slot,
+  .preview-panel .ballot-share-row.is-fixed-slot {
     margin-inline: 0;
     padding-inline: 4px;
     border-radius: 12px;
   }
-  .ballot-row-photo { height: 56px; }
-  .party-badge {
+  .preview-panel .ballot-row-photo { height: 56px; }
+  .preview-panel .party-badge {
     width: 42px;
     gap: 4px;
   }
-  .party-badge-logo,
-  .party-badge-mark {
+  .preview-panel .party-badge-logo,
+  .preview-panel .party-badge-mark {
     width: 42px;
     height: 42px;
     border-radius: 10px;
   }
-  .party-badge-logo img {
+  .preview-panel .party-badge-logo img {
     border-radius: 7px;
   }
-  .party-badge-mark {
+  .preview-panel .party-badge-mark {
     font-size: 7px;
     border-radius: 10px;
   }
-  .party-badge-label {
+  .preview-panel .party-badge-label {
     max-width: 42px;
     font-size: 7px;
     line-height: 1.1;
   }
-  .ballot-row-photo-main,
-  .ballot-row-photo .candidate-photo:not(.ballot-vice-photo) {
+  .preview-panel .ballot-row-photo-main,
+  .preview-panel .ballot-row-photo .candidate-photo:not(.ballot-vice-photo) {
     width: 46px;
     height: 46px;
     border-radius: 8px;
   }
-  .ballot-row-photo.is-duo .ballot-vice-photo {
+  .preview-panel .ballot-row-photo.is-duo .ballot-vice-photo {
     left: calc((100% - 46px) / 2 + 46px + 3px);
     width: 34px !important;
     height: 40px !important;
     border-radius: 6px;
   }
-  .ballot-row .number-box {
+  .preview-panel .ballot-row .number-box {
     width: 20px;
     height: 28px;
     font-size: 12px;
     border-radius: 5px;
   }
-  .ballot-row-office { font-size: 8px; letter-spacing: .06em; }
-  .ballot-row-names { font-size: 10px; }
-  .ballot-row-names-divider { width: min(100%, 56px); }
-  .ballot-blank-pill { min-width: 96px; height: 34px; font-size: 12px; }
+  .preview-panel .ballot-row-office { font-size: 8px; letter-spacing: .06em; }
+  .preview-panel .ballot-row-names { font-size: 10px; }
+  .preview-panel .ballot-row-names-divider { width: min(100%, 56px); }
+  .preview-panel .ballot-blank-pill { min-width: 96px; height: 34px; font-size: 12px; }
   .preview-options { gap: 6px; }
   .preview-option-btn {
     min-height: 38px;
@@ -1752,6 +1789,17 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .picker-results { padding-inline: 10px; }
   .picker-vote-options { padding: 12px 16px 18px; }
   .empty-slot-button { min-height: 82px; padding: 10px; gap: 10px; }
+  .office-card-chapa {
+    margin-inline: -10px;
+  }
+  .office-card-chapa-track {
+    gap: 8px;
+    scroll-padding-inline: 10px;
+    padding-inline: 10px;
+  }
+  .office-card-chapa-slide {
+    flex-basis: calc(100% - 18px);
+  }
   .empty-slot .office-card-copy > .empty-slot-cta,
   .empty-slot .office-card-copy > .empty-slot-hint { display: none; }
   .empty-slot .office-card-heading { margin-bottom: 0; }
