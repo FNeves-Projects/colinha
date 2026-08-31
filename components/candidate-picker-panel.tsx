@@ -1,12 +1,17 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Filter, Search, X } from "lucide-react";
 import { nullBallotNumber, selectionPickerLabel, selectionRemoveLabel, type OfficeSelection, type SpecialVoteKind } from "@/lib/ballot-selections";
 import type { Office } from "@/lib/offices";
+import { fetchTicketSlateForOffice } from "@/lib/ticket-mate-fetch";
+import { hasTicketSlate, slateMateRoleLabel } from "@/lib/ticket-mates";
 import type { CandidateSummary } from "@/lib/types";
 import { UrnaBrancoLabel } from "@/components/urna-branco-label";
+import { UrnaConfirmaLabel } from "@/components/urna-confirma-label";
+import { UrnaCorrigeLabel } from "@/components/urna-corrige-label";
+import { UrnaNuloLabel } from "@/components/urna-nulo-label";
 
 function candidateInitials(candidate: CandidateSummary) {
   return candidate.ballotName
@@ -59,18 +64,191 @@ function PickerNumberBoxes({ number, digits }: { number?: string; digits: number
   );
 }
 
-function VoteOptionButtons({
-  onSelect,
+function useOfficeTicketSlate(office: Office, candidate: CandidateSummary | null) {
+  const [mates, setMates] = useState<CandidateSummary[]>([]);
+
+  useEffect(() => {
+    if (!candidate || !hasTicketSlate(candidate.officeCode)) {
+      setMates([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    void fetchTicketSlateForOffice(office, candidate, controller.signal)
+      .then((slate) => {
+        if (!controller.signal.aborted) setMates(slate);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setMates([]);
+      });
+
+    return () => controller.abort();
+  }, [office, candidate]);
+
+  return mates;
+}
+
+function PickerTicketMateRow({
+  headOfficeCode,
+  mate,
+  onInspect,
 }: {
-  onSelect: (vote: SpecialVoteKind) => void;
+  headOfficeCode: number;
+  mate: CandidateSummary;
+  onInspect?: () => void;
 }) {
+  const content = (
+    <>
+      <PickerPhoto candidate={mate} />
+      <div className="picker-ticket-mate-copy">
+        <span>{slateMateRoleLabel(headOfficeCode, mate.officeCode)}</span>
+        <strong>{mate.ballotName}</strong>
+        <small>{mate.partyAcronym ?? "Partido não informado"}</small>
+      </div>
+      {onInspect && <span className="picker-selection-info">Ver info</span>}
+    </>
+  );
+
+  if (!onInspect) {
+    return <div className="picker-ticket-mate">{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      className="picker-ticket-mate picker-ticket-mate-button"
+      onClick={onInspect}
+      aria-label={`Ver informações de ${mate.ballotName}`}
+    >
+      {content}
+    </button>
+  );
+}
+
+function PickerCandidatePreview({
+  kicker,
+  candidate,
+  headOfficeCode,
+  mates,
+  label,
+  number,
+  special,
+  hideLabel = false,
+  onInspect,
+  onInspectMate,
+}: {
+  kicker: string;
+  candidate: CandidateSummary | null;
+  headOfficeCode?: number;
+  mates: CandidateSummary[];
+  label: string;
+  number?: string;
+  special?: ReactNode;
+  hideLabel?: boolean;
+  onInspect?: () => void;
+  onInspectMate?: (mate: CandidateSummary) => void;
+}) {
+  const main = (
+    <div className="picker-selection-main">
+      {candidate && <PickerPhoto candidate={candidate} />}
+      <div className="picker-selection-copy">
+        <span className="picker-selection-kicker">{kicker}</span>
+        {!hideLabel && <strong>{label}</strong>}
+        {candidate && (
+          <small>{candidate.partyAcronym ?? "Partido não informado"}</small>
+        )}
+        {special}
+      </div>
+      {(number || onInspect) && (
+        <div className="picker-selection-side">
+          {number && <b>{number}</b>}
+          {onInspect && <span className="picker-selection-info">Ver info</span>}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {candidate && onInspect ? (
+        <button
+          type="button"
+          className="picker-selection-button"
+          onClick={onInspect}
+          aria-label={`Ver informações de ${label}`}
+        >
+          {main}
+        </button>
+      ) : main}
+      {candidate && headOfficeCode && mates.map((mate) => (
+        <PickerTicketMateRow
+          key={mate.id}
+          headOfficeCode={headOfficeCode}
+          mate={mate}
+          onInspect={onInspectMate ? () => onInspectMate(mate) : undefined}
+        />
+      ))}
+    </>
+  );
+}
+
+function VoteOptionButtons({
+  pendingSelection,
+  onPickSpecial,
+  onConfirm,
+  onRemoveFromColinha,
+  currentSelection = null,
+}: {
+  pendingSelection: OfficeSelection;
+  onPickSpecial: (vote: SpecialVoteKind) => void;
+  onConfirm: () => void;
+  onRemoveFromColinha?: () => void;
+  currentSelection?: OfficeSelection;
+}) {
+  const canConfirm = Boolean(pendingSelection);
+  const hasColinhaSelection = Boolean(onRemoveFromColinha && currentSelection && selectionPickerLabel(currentSelection));
+  const canCorrige = hasColinhaSelection;
+  const canPickSpecial = !hasColinhaSelection;
+
   return (
     <div className="vote-options picker-vote-options">
-      <button type="button" className="btn-glass btn-glass--card btn-glass--card-null vote-option vote-option-null" onClick={() => onSelect("nulo")} aria-label="Votar nulo">
-        <span className="vote-option-label">Nulo</span>
+      <button
+        type="button"
+        className={`vote-option vote-option-null vote-option-null-urna${pendingSelection?.type === "special" && pendingSelection.vote === "nulo" ? " is-pending" : ""}`}
+        onClick={() => onPickSpecial("nulo")}
+        disabled={!canPickSpecial}
+        aria-label="Votar nulo"
+        aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "nulo"}
+      >
+        <UrnaNuloLabel interactive />
       </button>
-      <button type="button" className="vote-option vote-option-blank vote-option-blank-urna" onClick={() => onSelect("branco")} aria-label="Votar em branco">
-        <UrnaBrancoLabel />
+      <button
+        type="button"
+        className={`vote-option vote-option-blank vote-option-blank-urna${pendingSelection?.type === "special" && pendingSelection.vote === "branco" ? " is-pending" : ""}`}
+        onClick={() => onPickSpecial("branco")}
+        disabled={!canPickSpecial}
+        aria-label="Votar em branco"
+        aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "branco"}
+      >
+        <UrnaBrancoLabel interactive />
+      </button>
+      <button
+        type="button"
+        className="vote-option vote-option-corrige vote-option-corrige-urna"
+        onClick={() => onRemoveFromColinha?.()}
+        disabled={!canCorrige}
+        aria-label={canCorrige ? selectionRemoveLabel(currentSelection ?? null) : "Corrige"}
+      >
+        <UrnaCorrigeLabel interactive />
+      </button>
+      <button
+        type="button"
+        className="vote-option vote-option-confirma vote-option-confirma-urna"
+        onClick={onConfirm}
+        disabled={!canConfirm}
+        aria-label="Confirmar seleção"
+      >
+        <UrnaConfirmaLabel interactive />
       </button>
     </div>
   );
@@ -85,6 +263,7 @@ export function CandidatePickerPanel({
   onSelectSpecial,
   onClearCurrent,
   onPrefetch,
+  onInspectCandidate,
 }: {
   office: Office;
   presentation: "inline" | "modal";
@@ -94,6 +273,7 @@ export function CandidatePickerPanel({
   onSelectSpecial: (vote: SpecialVoteKind) => void;
   onClearCurrent?: () => void;
   onPrefetch?: (candidate: CandidateSummary) => void;
+  onInspectCandidate?: (candidate: CandidateSummary, mode?: "pending" | "saved") => void;
 }) {
   const partyFilterId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -103,6 +283,15 @@ export function CandidatePickerPanel({
   const [results, setResults] = useState<CandidateSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState<OfficeSelection>(null);
+  const pendingCandidate = pendingSelection?.type === "candidate" ? pendingSelection.candidate : null;
+  const currentCandidate = currentSelection?.type === "candidate" ? currentSelection.candidate : null;
+  const pendingMates = useOfficeTicketSlate(office, pendingCandidate);
+  const currentMates = useOfficeTicketSlate(office, currentCandidate);
+
+  useEffect(() => {
+    setPendingSelection(null);
+  }, [office]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -171,11 +360,33 @@ export function CandidatePickerPanel({
   }, [presentation]);
 
   const currentLabel = selectionPickerLabel(currentSelection);
-  const currentCandidate = currentSelection?.type === "candidate" ? currentSelection.candidate : null;
+  const pendingLabel = selectionPickerLabel(pendingSelection);
+  const pendingIsSpecial = pendingSelection?.type === "special";
+  const currentIsSpecial = currentSelection?.type === "special";
 
   function handleClearCurrent() {
     onClearCurrent?.();
+    setPendingSelection(null);
     window.requestAnimationFrame(() => searchRef.current?.focus());
+  }
+
+  function handlePickCandidate(candidate: CandidateSummary) {
+    setPendingSelection({ type: "candidate", candidate });
+  }
+
+  function handlePickSpecial(vote: SpecialVoteKind) {
+    setPendingSelection({ type: "special", vote });
+  }
+
+  function handleConfirm() {
+    if (!pendingSelection) return;
+    if (pendingSelection.type === "candidate") {
+      onSelect(pendingSelection.candidate);
+      setPendingSelection(null);
+      return;
+    }
+    onSelectSpecial(pendingSelection.vote);
+    setPendingSelection(null);
   }
 
   const panel = (
@@ -196,24 +407,59 @@ export function CandidatePickerPanel({
         </button>
       </div>
 
-      {currentLabel && onClearCurrent && !office.fixed && (
+      {pendingLabel && (
+        <div className="picker-pending">
+          <PickerCandidatePreview
+            kicker="Selecionado"
+            candidate={pendingCandidate}
+            headOfficeCode={pendingCandidate?.officeCode}
+            mates={pendingMates}
+            label={pendingLabel ?? ""}
+            hideLabel={pendingIsSpecial}
+            number={pendingCandidate?.ballotNumber}
+            onInspect={pendingCandidate && onInspectCandidate
+              ? () => onInspectCandidate(pendingCandidate, "pending")
+              : undefined}
+            onInspectMate={onInspectCandidate ? (mate) => onInspectCandidate(mate) : undefined}
+            special={(
+              <>
+                {pendingSelection?.type === "special" && pendingSelection.vote === "nulo" && (
+                  <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+                )}
+                {pendingSelection?.type === "special" && pendingSelection.vote === "branco" && (
+                  <UrnaBrancoLabel compact />
+                )}
+              </>
+            )}
+          />
+        </div>
+      )}
+
+      {currentLabel && onClearCurrent && !office.fixed && !pendingLabel && (
         <div className="picker-current">
-          <div className="picker-current-main">
-            {currentCandidate && <PickerPhoto candidate={currentCandidate} />}
-            <div>
-              <span className="picker-current-kicker">Escolha atual</span>
-              <strong>{currentLabel}</strong>
-              {currentSelection?.type === "special" && currentSelection.vote === "nulo" && (
-                <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
-              )}
-              {currentSelection?.type === "special" && currentSelection.vote === "branco" && (
-                <UrnaBrancoLabel compact />
-              )}
-            </div>
-          </div>
-          <button type="button" className="btn-glass btn-glass--sm btn-glass--ghost btn-glass--danger btn-glass--block picker-clear-current" onClick={handleClearCurrent}>
-            {selectionRemoveLabel(currentSelection)}
-          </button>
+          <PickerCandidatePreview
+            kicker="Escolha atual"
+            candidate={currentCandidate}
+            headOfficeCode={currentCandidate?.officeCode}
+            mates={currentMates}
+            label={currentLabel ?? ""}
+            hideLabel={currentIsSpecial}
+            number={currentCandidate?.ballotNumber}
+            onInspect={currentCandidate && onInspectCandidate
+              ? () => onInspectCandidate(currentCandidate, "saved")
+              : undefined}
+            onInspectMate={onInspectCandidate ? (mate) => onInspectCandidate(mate) : undefined}
+            special={(
+              <>
+                {currentSelection?.type === "special" && currentSelection.vote === "nulo" && (
+                  <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
+                )}
+                {currentSelection?.type === "special" && currentSelection.vote === "branco" && (
+                  <UrnaBrancoLabel compact />
+                )}
+              </>
+            )}
+          />
         </div>
       )}
 
@@ -249,12 +495,13 @@ export function CandidatePickerPanel({
         {results.map((candidate) => (
           <button
             type="button"
-            className={`btn-glass btn-glass--list picker-result-main${currentCandidate?.id === candidate.id ? " is-current" : ""}`}
+            className={`btn-glass btn-glass--list picker-result-main${pendingCandidate?.id === candidate.id ? " is-pending" : ""}${currentCandidate?.id === candidate.id ? " is-current" : ""}`}
             key={candidate.id}
             onPointerEnter={() => onPrefetch?.(candidate)}
             onFocus={() => onPrefetch?.(candidate)}
             onTouchStart={() => onPrefetch?.(candidate)}
-            onClick={() => onSelect(candidate)}
+            onClick={() => handlePickCandidate(candidate)}
+            aria-pressed={pendingCandidate?.id === candidate.id}
           >
             <PickerPhoto candidate={candidate} />
             <span>
@@ -272,7 +519,15 @@ export function CandidatePickerPanel({
         )}
       </div>
 
-      {!office.fixed && <VoteOptionButtons onSelect={onSelectSpecial} />}
+      {!office.fixed && (
+        <VoteOptionButtons
+          pendingSelection={pendingSelection}
+          onPickSpecial={handlePickSpecial}
+          onConfirm={handleConfirm}
+          onRemoveFromColinha={onClearCurrent ? handleClearCurrent : undefined}
+          currentSelection={currentSelection}
+        />
+      )}
     </section>
   );
 

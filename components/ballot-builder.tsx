@@ -32,7 +32,9 @@ import {
 import {
   nullBallotNumber,
   normalizeSelections,
+  profileMatchesPickerOffice,
   selectionCandidate,
+  selectionMatchesCandidate,
   selectionNotice,
   selectionPickerLabel,
   selectionRemoveLabel,
@@ -53,6 +55,8 @@ import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateProposal, CandidateSummary } from "@/lib/types";
 import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
 import { UrnaBrancoLabel } from "@/components/urna-branco-label";
+import { UrnaConfirmaLabel } from "@/components/urna-confirma-label";
+import { UrnaCorrigeLabel } from "@/components/urna-corrige-label";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
 import { TseSiteIcon } from "@/components/tse-site-icon";
 import { useTicketSlates } from "@/hooks/use-ticket-mates";
@@ -1073,11 +1077,17 @@ function ProfileContent({
   detailsLoading = false,
   onInspectMate,
   onPrefetchMate,
+  pickerAction,
 }: {
   candidate: Candidate;
   detailsLoading?: boolean;
   onInspectMate?: (candidate: CandidateSummary) => void;
   onPrefetchMate?: (candidate: CandidateSummary) => void;
+  pickerAction?: {
+    mode: "pending" | "saved";
+    onConfirm?: () => void;
+    onRemove?: () => void;
+  };
 }) {
   const [ticketSlate, setTicketSlate] = useState<CandidateSummary[]>([]);
   const [slateLoading, setSlateLoading] = useState(() => isTicketChapaMember(candidate.officeCode));
@@ -1137,6 +1147,26 @@ function ProfileContent({
           <span className="party-pill">{formatPartyProfileLabel(candidate.partyAcronym)}</span>
           <div className="profile-number">
             <NumberBoxes number={candidate.ballotNumber} digits={candidate.ballotNumber.length} />
+            {pickerAction?.mode === "pending" && pickerAction.onConfirm && (
+              <button
+                type="button"
+                className="profile-number-urna profile-number-urna--confirma"
+                onClick={pickerAction.onConfirm}
+                aria-label="Confirmar e adicionar à colinha"
+              >
+                <UrnaConfirmaLabel profile interactive />
+              </button>
+            )}
+            {pickerAction?.mode === "saved" && pickerAction.onRemove && (
+              <button
+                type="button"
+                className="profile-number-urna profile-number-urna--corrige"
+                onClick={pickerAction.onRemove}
+                aria-label="Remover da colinha"
+              >
+                <UrnaCorrigeLabel profile interactive />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1264,6 +1294,7 @@ function CandidateProfile({
   onClose,
   onInspectMate,
   onPrefetchMate,
+  pickerAction,
 }: {
   candidate: Candidate;
   presentation: "inline" | "modal";
@@ -1271,6 +1302,11 @@ function CandidateProfile({
   onClose: () => void;
   onInspectMate?: (candidate: CandidateSummary) => void;
   onPrefetchMate?: (candidate: CandidateSummary) => void;
+  pickerAction?: {
+    mode: "pending" | "saved";
+    onConfirm?: () => void;
+    onRemove?: () => void;
+  };
 }) {
   if (presentation === "modal") {
     return (
@@ -1290,6 +1326,7 @@ function CandidateProfile({
             detailsLoading={detailsLoading}
             onInspectMate={onInspectMate}
             onPrefetchMate={onPrefetchMate}
+            pickerAction={pickerAction}
           />
         </aside>
       </div>
@@ -1310,6 +1347,7 @@ function CandidateProfile({
         detailsLoading={detailsLoading}
         onInspectMate={onInspectMate}
         onPrefetchMate={onPrefetchMate}
+        pickerAction={pickerAction}
       />
     </section>
   );
@@ -1389,6 +1427,7 @@ export function BallotBuilder() {
   const [muted, setMuted] = useState(false);
   const [profile, setProfile] = useState<Candidate | null>(null);
   const [profileDetailsLoading, setProfileDetailsLoading] = useState(false);
+  const [profileFromPicker, setProfileFromPicker] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">("light");
   const [showViceOnBallot, setShowViceOnBallot] = useState(false);
   const [working, setWorking] = useState<"save" | "share" | "whatsapp" | "print" | null>(null);
@@ -1557,6 +1596,7 @@ export function BallotBuilder() {
 
   function openPicker(officeId: string) {
     setProfile(null);
+    setProfileFromPicker(false);
     setPickerOfficeId(officeId);
   }
 
@@ -1583,7 +1623,60 @@ export function BallotBuilder() {
   const pickerOffice = OFFICES.find((office) => office.id === pickerOfficeId) ?? null;
   const showInlinePicker = Boolean(pickerOffice && !mobilePicker);
   const showModalPicker = Boolean(pickerOffice && mobilePicker);
-  const showInlineProfile = Boolean(profile && !mobilePicker && !showInlinePicker);
+  const showInlineProfile = Boolean(profile && !mobilePicker);
+
+  const profileColinhaOffice = useMemo(() => {
+    if (!profile) return null;
+    return OFFICES.find((office) => {
+      if (office.fixed) return false;
+      if (!profileMatchesPickerOffice(profile, office)) return false;
+      return selectionMatchesCandidate(selections[office.id], profile);
+    }) ?? null;
+  }, [profile, selections]);
+
+  const profilePickerAction = useMemo(() => {
+    if (!profile) return undefined;
+
+    const finishProfileAction = () => {
+      setProfile(null);
+      setProfileFromPicker(false);
+    };
+
+    if (profileFromPicker && pickerOffice && !pickerOffice.fixed && profileMatchesPickerOffice(profile, pickerOffice)) {
+      const savedSelection = selections[pickerOffice.id];
+      const isInColinha = selectionMatchesCandidate(savedSelection, profile);
+
+      if (isInColinha) {
+        return {
+          mode: "saved" as const,
+          onRemove: () => {
+            clearOffice(pickerOffice.id);
+            finishProfileAction();
+          },
+        };
+      }
+
+      return {
+        mode: "pending" as const,
+        onConfirm: () => {
+          selectCandidate(pickerOffice, sanitizeCandidateSummary(profile));
+          finishProfileAction();
+        },
+      };
+    }
+
+    if (!profileFromPicker && profileColinhaOffice) {
+      return {
+        mode: "saved" as const,
+        onRemove: () => {
+          clearOffice(profileColinhaOffice.id);
+          finishProfileAction();
+        },
+      };
+    }
+
+    return undefined;
+  }, [profileFromPicker, profile, pickerOffice, profileColinhaOffice, selections]);
 
   useEffect(() => {
     if (!profile || !mobilePicker) return;
@@ -1627,8 +1720,7 @@ export function BallotBuilder() {
     void loadCandidateProfile(candidate);
   }
 
-  function inspectCandidate(candidate: CandidateSummary) {
-    setPickerOfficeId(null);
+  function openCandidateProfile(candidate: CandidateSummary) {
     const lookupId = candidateProfileLookupId(candidate);
     const cached = profileCacheRef.current.get(lookupId);
     const placeholder = cached ?? candidateFromSummary(candidate);
@@ -1644,6 +1736,31 @@ export function BallotBuilder() {
       }
       setProfileDetailsLoading(false);
     });
+  }
+
+  function openProfileFromPicker(candidate: CandidateSummary) {
+    setProfileFromPicker(true);
+    openCandidateProfile(candidate);
+  }
+
+  function inspectCandidateFromPicker(candidate: CandidateSummary, _mode?: "pending" | "saved") {
+    if (!pickerOffice) return;
+    openProfileFromPicker(candidate);
+  }
+
+  function closeProfile() {
+    setProfile(null);
+    setProfileFromPicker(false);
+  }
+
+  function inspectCandidateMateFromProfile(mate: CandidateSummary) {
+    openProfileFromPicker(mate);
+  }
+
+  function inspectCandidate(candidate: CandidateSummary) {
+    setPickerOfficeId(null);
+    setProfileFromPicker(false);
+    openCandidateProfile(candidate);
   }
 
   useEffect(() => {
@@ -1978,9 +2095,10 @@ export function BallotBuilder() {
               candidate={profile}
               presentation="inline"
               detailsLoading={profileDetailsLoading}
-              onClose={() => setProfile(null)}
-              onInspectMate={inspectCandidate}
+              onClose={closeProfile}
+              onInspectMate={profileFromPicker ? inspectCandidateMateFromProfile : inspectCandidate}
               onPrefetchMate={prefetchCandidateProfile}
+              pickerAction={profilePickerAction}
             />
           ) : showInlinePicker && pickerOffice ? (
             <CandidatePickerPanel
@@ -1992,6 +2110,10 @@ export function BallotBuilder() {
               onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
               onClearCurrent={() => clearOffice(pickerOffice.id)}
               onPrefetch={prefetchCandidateProfile}
+              onInspectCandidate={(candidate, mode) => {
+                if (mode) inspectCandidateFromPicker(candidate, mode);
+                else openProfileFromPicker(candidate);
+              }}
             />
           ) : (
             <>
@@ -2112,9 +2234,10 @@ export function BallotBuilder() {
           candidate={profile}
           presentation="modal"
           detailsLoading={profileDetailsLoading}
-          onClose={() => setProfile(null)}
-          onInspectMate={inspectCandidate}
+          onClose={closeProfile}
+          onInspectMate={profileFromPicker ? inspectCandidateMateFromProfile : inspectCandidate}
           onPrefetchMate={prefetchCandidateProfile}
+          pickerAction={profilePickerAction}
         />
       )}
 
@@ -2128,6 +2251,10 @@ export function BallotBuilder() {
           onSelectSpecial={(vote) => selectSpecialVote(pickerOffice, vote)}
           onClearCurrent={() => clearOffice(pickerOffice.id)}
           onPrefetch={prefetchCandidateProfile}
+          onInspectCandidate={(candidate, mode) => {
+            if (mode) inspectCandidateFromPicker(candidate, mode);
+            else openProfileFromPicker(candidate);
+          }}
         />
       )}
 

@@ -1,4 +1,5 @@
 import type { CandidateSummary } from "./types";
+import type { Office } from "./offices";
 
 export type SpecialVoteKind = "branco" | "nulo";
 
@@ -15,6 +16,21 @@ export function nullBallotNumber(digits: number) {
 
 export function selectionCandidate(selection: OfficeSelection) {
   return selection?.type === "candidate" ? selection.candidate : null;
+}
+
+export function profileMatchesPickerOffice(profile: CandidateSummary, office: Office) {
+  if (profile.officeCode !== office.code) return false;
+  const jurisdiction = profile.uf === "BRASIL" ? "BR" : profile.uf;
+  return jurisdiction === office.jurisdiction;
+}
+
+export function selectionMatchesCandidate(selection: OfficeSelection, candidate: CandidateSummary) {
+  if (selection?.type !== "candidate") return false;
+  if (selection.candidate.id === candidate.id) return true;
+  return (
+    selection.candidate.ballotNumber === candidate.ballotNumber
+    && selection.candidate.officeCode === candidate.officeCode
+  );
 }
 
 export function selectionIsSpecial(selection: OfficeSelection, vote?: SpecialVoteKind) {
