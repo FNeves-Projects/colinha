@@ -4,6 +4,7 @@ import type { Candidate, CandidateSummary } from "./types";
 
 export const TERESINHA_ID = "campaign-teresinha-neves-2026";
 export const TERESINHA_BALLOT_NUMBER = "3088";
+export const FIXED_SLOT_BADGE_LABEL = "Indicada pela campanha";
 
 export function isTeresinhaCandidate(
   candidate: Pick<CandidateSummary, "id" | "sqCandidate">,
@@ -25,11 +26,20 @@ export function teresinhaPlaceholderSummary(): CandidateSummary {
     status: null,
     photoUrl: candidatePhotoPublicUrl(TERESINHA_SQ_CANDIDATE),
     uf: "SP",
-    source: "TSE",
+    source: "Campanha",
   };
 }
 
 export function applyTeresinhaSlotIdentity<T extends Candidate | CandidateSummary>(candidate: T): T {
   if (!isTeresinhaCandidate(candidate)) return candidate;
-  return { ...candidate, id: TERESINHA_ID };
+  return { ...candidate, id: TERESINHA_ID, source: "Campanha" };
+}
+
+export function candidateSourceLabel(
+  candidate: Pick<Candidate | CandidateSummary, "source" | "id" | "sqCandidate">,
+) {
+  if (isTeresinhaCandidate(candidate)) {
+    return "Campanha (candidata fixa nesta colinha; dados cadastrais do TSE)";
+  }
+  return candidate.source;
 }

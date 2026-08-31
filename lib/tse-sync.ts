@@ -6,6 +6,7 @@ import { syncCandidatePhotos } from "./candidate-photo-sync";
 import { getSql } from "./db";
 import { normalizeSocialLink } from "./social-links";
 import {
+  TERESINHA_SQ_CANDIDATE,
   TSE_CANDIDATE_PHOTO_BASE,
   TSE_ELECTION_ID_2026,
   tseCandidateUrl,
@@ -248,9 +249,13 @@ async function persistCandidates(normalized: NormalizedCandidate[]) {
           ELSE COALESCE(EXCLUDED.photo_url, candidates.photo_url)
         END,
         tse_url = COALESCE(EXCLUDED.tse_url, candidates.tse_url),
-        source = 'TSE', source_updated_at = EXCLUDED.source_updated_at,
+        source = CASE
+          WHEN EXCLUDED.sq_candidate = $2 THEN 'Campanha'
+          ELSE 'TSE'
+        END,
+        source_updated_at = EXCLUDED.source_updated_at,
         updated_at = now()`,
-      [JSON.stringify(batch)],
+      [JSON.stringify(batch), TERESINHA_SQ_CANDIDATE],
     );
   }
 }
@@ -640,6 +645,17 @@ async function upsertAssets(rows: CsvRow[]) {
   return counts[0]?.count ?? 0;
 }
 
+async function ensureTeresinhaCampaignSource() {
+  const sql = getSql();
+  await sql.query(
+    `UPDATE candidates
+        SET source = 'Campanha',
+            updated_at = now()
+      WHERE sq_candidate = $1`,
+    [TERESINHA_SQ_CANDIDATE],
+  );
+}
+
 export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: boolean }) {
   const sql = getSql();
   const runRows = await sql.query(
@@ -810,6 +826,7 @@ export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: bo
           };
         });
     details = { ...details, photoBackfillCount, ...photoSyncDetails, ...detailSyncDetails };
+    await ensureTeresinhaCampaignSource();
     await sql.query(
       `UPDATE sync_runs SET status = 'success', finished_at = now(), details = $2::jsonb WHERE id = $1`,
       [runId, JSON.stringify(details)],

@@ -19,12 +19,11 @@ import {
   Share,
   Sun,
   Users,
-  Volume2,
-  VolumeX,
   X,
 } from "lucide-react";
 import { OFFICES, type Office } from "@/lib/offices";
 import {
+  candidateSourceLabel,
   isTeresinhaCandidate,
   TERESINHA_ID,
   teresinhaPlaceholderSummary,
@@ -53,13 +52,16 @@ import { isTicketChapaMember, slateMemberRoleLabel, slateMateRoleLabel, ticketHe
 import { normalizeSocialLinks, pickPrimarySocialLink, socialSummaryPlatformLabel } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateProposal, CandidateSummary } from "@/lib/types";
+import { CampaignDisclaimer } from "@/components/campaign-disclaimer";
+import { DataFreshnessNote } from "@/components/data-freshness-note";
 import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
-import { UrnaBrancoLabel } from "@/components/urna-branco-label";
-import { UrnaConfirmaLabel } from "@/components/urna-confirma-label";
-import { UrnaCorrigeLabel } from "@/components/urna-corrige-label";
+import { FixedSlotBadge } from "@/components/fixed-slot-badge";
+import { PickerActionButton } from "@/components/picker-action-button";
+import { SpecialVoteBadge } from "@/components/special-vote-badge";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
 import { TseSiteIcon } from "@/components/tse-site-icon";
 import { useTicketSlates } from "@/hooks/use-ticket-mates";
+import { useDataFreshness } from "@/hooks/use-data-freshness";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
 const PREVIEW_THEME_KEY = "colinha-preview-theme-v1";
@@ -416,7 +418,7 @@ function BallotPreviewRow({
             <span className="ballot-row-office">{officeLabel}</span>
           </div>
           {selection.vote === "branco" ? (
-            <UrnaBrancoLabel compact />
+            <SpecialVoteBadge vote="branco" compact />
           ) : (
             <>
               <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
@@ -450,6 +452,7 @@ function BallotPreviewRow({
       <div className="ballot-row-main">
         <div className="ballot-row-heading">
           <span className="ballot-row-office">{officeLabel}</span>
+          {office.fixed ? <FixedSlotBadge variant="ballot" /> : null}
         </div>
         <NumberBoxes number={candidate.ballotNumber} digits={office.digits} />
         <div className="ballot-row-names">
@@ -508,6 +511,7 @@ function OfficeCardFace({
       <div className="office-card-copy">
         <div className="office-card-heading">
           <span>{headingLabel}</span>
+          {fixed ? <FixedSlotBadge /> : null}
         </div>
         <strong>{candidate.ballotName}</strong>
         <small>
@@ -586,7 +590,7 @@ function SpecialVoteCard({
           <ArrowLeftRight size={16} strokeWidth={2.2} />
         </button>
         {vote === "branco" ? (
-          <UrnaBrancoLabel compact />
+          <SpecialVoteBadge vote="branco" compact />
         ) : (
           <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
         )}
@@ -1179,24 +1183,20 @@ function ProfileContent({
           <div className="profile-number">
             <NumberBoxes number={candidate.ballotNumber} digits={ballotDigits} />
             {pickerAction?.mode === "pending" && pickerAction.onConfirm && (
-              <button
-                type="button"
-                className="profile-number-urna profile-number-urna--confirma"
+              <PickerActionButton
+                variant="save"
+                className="profile-number-action"
                 onClick={pickerAction.onConfirm}
-                aria-label="Confirmar e adicionar à colinha"
-              >
-                <UrnaConfirmaLabel profile interactive />
-              </button>
+                aria-label="Salvar e adicionar à colinha"
+              />
             )}
             {pickerAction?.mode === "saved" && pickerAction.onRemove && (
-              <button
-                type="button"
-                className="profile-number-urna profile-number-urna--corrige"
+              <PickerActionButton
+                variant="remove"
+                className="profile-number-action"
                 onClick={pickerAction.onRemove}
                 aria-label="Remover da colinha"
-              >
-                <UrnaCorrigeLabel profile interactive />
-              </button>
+              />
             )}
           </div>
         </div>
@@ -1260,7 +1260,7 @@ function ProfileContent({
             <div><span>Estado civil</span><strong>{profileDetailValue(candidate.maritalStatus, detailsLoading)}</strong></div>
             <div><span>Nacionalidade</span><strong>{profileDetailValue(candidate.nationality, detailsLoading)}</strong></div>
             <div><span>Naturalidade</span><strong>{profileDetailValue(candidate.birthplace, detailsLoading)}</strong></div>
-            <div><span>Fonte</span><strong>{candidate.source}</strong></div>
+            <div><span>Fonte</span><strong>{candidateSourceLabel(candidate)}</strong></div>
           </div>
         </ProfileCollapsibleSection>
 
@@ -1468,7 +1468,6 @@ function BallotPdfModal({
 export function BallotBuilder() {
   const [selections, setSelections] = useState<Selections>(initialSelections);
   const [hydrated, setHydrated] = useState(false);
-  const [muted, setMuted] = useState(false);
   const [profile, setProfile] = useState<Candidate | null>(null);
   const [profileDetailsLoading, setProfileDetailsLoading] = useState(false);
   const [profileFromPicker, setProfileFromPicker] = useState(false);
@@ -1486,7 +1485,6 @@ export function BallotBuilder() {
   const ballotCaptureCacheRef = useRef<{ key: string; dataUrl: string; file: File } | null>(null);
   const ballotCaptureTaskRef = useRef<Promise<{ key: string; dataUrl: string; file: File } | null> | null>(null);
   const refreshedSavedSelections = useRef(false);
-  const urnaSoundRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 960px)");
@@ -1500,7 +1498,6 @@ export function BallotBuilder() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as {
         selections?: Selections;
-        muted?: boolean;
         previewTheme?: "light" | "dark";
       };
       if (saved.selections) {
@@ -1509,7 +1506,6 @@ export function BallotBuilder() {
           ...normalizeSelections(saved.selections as Record<string, unknown>),
         }));
       }
-      setMuted(Boolean(saved.muted));
       const storedTheme = localStorage.getItem(PREVIEW_THEME_KEY);
       if (storedTheme === "light" || storedTheme === "dark") {
         setPreviewTheme(storedTheme);
@@ -1583,21 +1579,11 @@ export function BallotBuilder() {
   }, [hydrated, selections]);
 
   useEffect(() => {
-    const audio = new Audio("/sounds/urna-confirma.wav");
-    audio.preload = "auto";
-    urnaSoundRef.current = audio;
-    return () => {
-      audio.pause();
-      urnaSoundRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ selections, muted }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ selections }));
     localStorage.setItem(PREVIEW_THEME_KEY, previewTheme);
     localStorage.setItem(PREVIEW_VICE_KEY, showViceOnBallot ? "1" : "0");
-  }, [hydrated, muted, previewTheme, showViceOnBallot, selections]);
+  }, [hydrated, previewTheme, showViceOnBallot, selections]);
 
   const duplicateSenator = useMemo(() => {
     const first = selections.senador1;
@@ -1605,19 +1591,6 @@ export function BallotBuilder() {
     if (first?.type !== "candidate" || second?.type !== "candidate") return false;
     return first.candidate.ballotNumber === second.candidate.ballotNumber;
   }, [selections]);
-
-  function playUrnaSound() {
-    const audio = urnaSoundRef.current;
-    if (!audio) return;
-    audio.pause();
-    audio.currentTime = 0;
-    void audio.play().catch(() => {});
-  }
-
-  function playConfirmation() {
-    if (muted) return;
-    playUrnaSound();
-  }
 
   function selectCandidate(office: Office, candidate: CandidateSummary) {
     const cleanCandidate = sanitizeCandidateSummary(candidate);
@@ -1628,14 +1601,12 @@ export function BallotBuilder() {
     setPickerOfficeId(null);
     prefetchCandidateProfile(cleanCandidate);
     setNotice(`${candidate.ballotName} foi adicionado à sua colinha.`);
-    playConfirmation();
   }
 
   function selectSpecialVote(office: Office, vote: SpecialVoteKind) {
     setSelections((current) => ({ ...current, [office.id]: { type: "special", vote } }));
     setPickerOfficeId(null);
     setNotice(selectionNotice({ type: "special", vote }));
-    playConfirmation();
   }
 
   function openPicker(officeId: string) {
@@ -1663,6 +1634,7 @@ export function BallotBuilder() {
     [selections],
   );
   const ticketSlates = useTicketSlates(selections);
+  const dataFreshness = useDataFreshness();
 
   const pickerOffice = OFFICES.find((office) => office.id === pickerOfficeId) ?? null;
   const showInlinePicker = Boolean(pickerOffice && !mobilePicker);
@@ -2090,18 +2062,6 @@ export function BallotBuilder() {
               <span><Check size={14} aria-hidden="true" /> Salvo no aparelho</span>
             </div>
           </div>
-          <button
-            className="btn-glass btn-glass--hero sound-toggle"
-            type="button"
-            onClick={() => {
-              if (muted) playUrnaSound();
-              setMuted((value) => !value);
-            }}
-            aria-label={muted ? "Ativar som da urna" : "Desativar som da urna"}
-          >
-            {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
-            <span className="sound-toggle-label">{muted ? "Som desligado" : "Som ligado"}</span>
-          </button>
         </div>
       </header>
 
@@ -2277,7 +2237,10 @@ export function BallotBuilder() {
 
       <footer className="site-footer">
         <div className="footer-brand">colinha<span>.2026</span></div>
-        <p>Ferramenta de campanha. Antes de votar, confirme a situação e os dados oficiais da candidatura no TSE.</p>
+        <div className="footer-copy">
+          <CampaignDisclaimer />
+          <DataFreshnessNote freshness={dataFreshness} />
+        </div>
       </footer>
 
       {showModalPicker && pickerOffice && (

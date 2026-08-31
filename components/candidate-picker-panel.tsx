@@ -8,10 +8,8 @@ import type { Office } from "@/lib/offices";
 import { fetchTicketSlateForOffice } from "@/lib/ticket-mate-fetch";
 import { hasTicketSlate, slateMateRoleLabel } from "@/lib/ticket-mates";
 import type { CandidateSummary } from "@/lib/types";
-import { UrnaBrancoLabel } from "@/components/urna-branco-label";
-import { UrnaConfirmaLabel } from "@/components/urna-confirma-label";
-import { UrnaCorrigeLabel } from "@/components/urna-corrige-label";
-import { UrnaNuloLabel } from "@/components/urna-nulo-label";
+import { PickerActionButton } from "@/components/picker-action-button";
+import { SpecialVoteBadge } from "@/components/special-vote-badge";
 
 function candidateInitials(candidate: CandidateSummary) {
   return candidate.ballotName
@@ -205,7 +203,7 @@ function PickerSpecialPreview({
     return <PickerNumberBoxes number={nullBallotNumber(digits)} digits={digits} />;
   }
   if (selection.vote === "branco") {
-    return <UrnaBrancoLabel compact />;
+    return <SpecialVoteBadge vote="branco" compact />;
   }
   return null;
 }
@@ -232,50 +230,40 @@ function VoteOptionButtons({
     <>
       {!canPickSpecial && (
         <p className="picker-vote-hint" id="picker-special-vote-hint" role="status">
-          Use <strong>Corrige</strong> para remover a escolha atual antes de votar nulo ou branco.
+          Use <strong>Remover</strong> para limpar a escolha atual antes de marcar nulo ou em branco.
         </p>
       )}
       <div className="vote-options picker-vote-options">
-      <button
-        type="button"
-        className={`vote-option vote-option-null vote-option-null-urna${pendingSelection?.type === "special" && pendingSelection.vote === "nulo" ? " is-pending" : ""}`}
-        onClick={() => onPickSpecial("nulo")}
-        disabled={!canPickSpecial}
-        aria-label="Votar nulo"
-        aria-describedby={!canPickSpecial ? "picker-special-vote-hint" : undefined}
-        aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "nulo"}
-      >
-        <UrnaNuloLabel interactive />
-      </button>
-      <button
-        type="button"
-        className={`vote-option vote-option-blank vote-option-blank-urna${pendingSelection?.type === "special" && pendingSelection.vote === "branco" ? " is-pending" : ""}`}
-        onClick={() => onPickSpecial("branco")}
-        disabled={!canPickSpecial}
-        aria-label="Votar em branco"
-        aria-describedby={!canPickSpecial ? "picker-special-vote-hint" : undefined}
-        aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "branco"}
-      >
-        <UrnaBrancoLabel interactive />
-      </button>
-      <button
-        type="button"
-        className="vote-option vote-option-corrige vote-option-corrige-urna"
-        onClick={() => onCorrige?.()}
-        disabled={!canCorrige}
-        aria-label={canCorrige ? (pendingSelection ? "Corrigir seleção" : selectionRemoveLabel(currentSelection ?? null)) : "Corrige"}
-      >
-        <UrnaCorrigeLabel interactive />
-      </button>
-      <button
-        type="button"
-        className="vote-option vote-option-confirma vote-option-confirma-urna"
-        onClick={onConfirm}
-        disabled={!canConfirm}
-        aria-label="Confirmar seleção"
-      >
-        <UrnaConfirmaLabel interactive />
-      </button>
+        <PickerActionButton
+          variant="nulo"
+          className={pendingSelection?.type === "special" && pendingSelection.vote === "nulo" ? "is-pending" : ""}
+          onClick={() => onPickSpecial("nulo")}
+          disabled={!canPickSpecial}
+          aria-label="Marcar voto nulo na colinha"
+          aria-describedby={!canPickSpecial ? "picker-special-vote-hint" : undefined}
+          aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "nulo"}
+        />
+        <PickerActionButton
+          variant="branco"
+          className={pendingSelection?.type === "special" && pendingSelection.vote === "branco" ? "is-pending" : ""}
+          onClick={() => onPickSpecial("branco")}
+          disabled={!canPickSpecial}
+          aria-label="Marcar voto em branco na colinha"
+          aria-describedby={!canPickSpecial ? "picker-special-vote-hint" : undefined}
+          aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "branco"}
+        />
+        <PickerActionButton
+          variant="remove"
+          onClick={() => onCorrige?.()}
+          disabled={!canCorrige}
+          aria-label={canCorrige ? (pendingSelection ? "Limpar seleção" : selectionRemoveLabel(currentSelection ?? null)) : "Remover"}
+        />
+        <PickerActionButton
+          variant="save"
+          onClick={onConfirm}
+          disabled={!canConfirm}
+          aria-label="Salvar na colinha"
+        />
       </div>
     </>
   );

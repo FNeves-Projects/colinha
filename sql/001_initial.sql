@@ -72,7 +72,7 @@ INSERT INTO candidates (
 ) VALUES (
   '250002530169', 2026, 'SP', 6, 'Deputada Federal', '3088',
   'Teresinha Neves', 'Teresinha de Almeida Ramos Neves', 'NOVO',
-  '/candidate-photos/250002530169.jpg', 'TSE'
+  '/candidate-photos/250002530169.jpg', 'Campanha'
 )
 ON CONFLICT (sq_candidate) DO UPDATE SET
   ballot_number = EXCLUDED.ballot_number,
@@ -80,5 +80,5 @@ ON CONFLICT (sq_candidate) DO UPDATE SET
   full_name = EXCLUDED.full_name,
   party_acronym = EXCLUDED.party_acronym,
   photo_url = COALESCE(candidates.photo_url, EXCLUDED.photo_url),
-  source = EXCLUDED.source,
+  source = 'Campanha',
   updated_at = now();
