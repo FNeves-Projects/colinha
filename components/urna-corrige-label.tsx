@@ -1,5 +1,4 @@
-const URNA_CORRIGE_BUTTON = "/urna-corrige-button.png";
-const URNA_CORRIGE_ASPECT = 855 / 467;
+import { UrnaKeyLabel, type UrnaKeySize } from "@/components/urna-key-label";
 
 type UrnaCorrigeLabelProps = {
   compact?: boolean;
@@ -8,26 +7,13 @@ type UrnaCorrigeLabelProps = {
   className?: string;
 };
 
-export function UrnaCorrigeLabel({
-  compact = false,
-  profile = false,
-  interactive = false,
-  className = "",
-}: UrnaCorrigeLabelProps) {
-  const width = profile ? 77 : compact ? 88 : 110;
-  const height = profile ? 42 : Math.round(width / URNA_CORRIGE_ASPECT);
+function resolveSize({ compact, profile }: UrnaCorrigeLabelProps): UrnaKeySize {
+  if (profile) return "profile";
+  if (compact) return "compact";
+  return "default";
+}
 
-  return (
-    <span
-      className={`urna-key-button urna-corrige-button${compact ? " urna-corrige-button--compact" : ""}${interactive ? " urna-key-button--interactive" : ""}${className ? ` ${className}` : ""}`}
-      style={{
-        width,
-        height,
-        backgroundImage: `url("${URNA_CORRIGE_BUTTON}")`,
-      }}
-      role="img"
-      aria-hidden={interactive ? true : undefined}
-      aria-label={interactive ? undefined : "Corrige"}
-    />
-  );
+export function UrnaCorrigeLabel(props: UrnaCorrigeLabelProps) {
+  const { interactive = false, className = "" } = props;
+  return <UrnaKeyLabel kind="corrige" size={resolveSize(props)} interactive={interactive} className={className} />;
 }

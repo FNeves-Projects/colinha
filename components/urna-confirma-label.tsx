@@ -1,5 +1,4 @@
-const URNA_CONFIRMA_BUTTON = "/urna-confirma-button.png";
-const URNA_CONFIRMA_ASPECT = 855 / 467;
+import { UrnaKeyLabel, type UrnaKeySize } from "@/components/urna-key-label";
 
 type UrnaConfirmaLabelProps = {
   compact?: boolean;
@@ -8,26 +7,13 @@ type UrnaConfirmaLabelProps = {
   className?: string;
 };
 
-export function UrnaConfirmaLabel({
-  compact = false,
-  profile = false,
-  interactive = false,
-  className = "",
-}: UrnaConfirmaLabelProps) {
-  const width = profile ? 77 : compact ? 88 : 110;
-  const height = profile ? 42 : Math.round(width / URNA_CONFIRMA_ASPECT);
+function resolveSize({ compact, profile }: UrnaConfirmaLabelProps): UrnaKeySize {
+  if (profile) return "profile";
+  if (compact) return "compact";
+  return "default";
+}
 
-  return (
-    <span
-      className={`urna-key-button urna-confirma-button${compact ? " urna-confirma-button--compact" : ""}${interactive ? " urna-key-button--interactive" : ""}${className ? ` ${className}` : ""}`}
-      style={{
-        width,
-        height,
-        backgroundImage: `url("${URNA_CONFIRMA_BUTTON}")`,
-      }}
-      role="img"
-      aria-hidden={interactive ? true : undefined}
-      aria-label={interactive ? undefined : "Confirma"}
-    />
-  );
+export function UrnaConfirmaLabel(props: UrnaConfirmaLabelProps) {
+  const { interactive = false, className = "" } = props;
+  return <UrnaKeyLabel kind="confirma" size={resolveSize(props)} interactive={interactive} className={className} />;
 }

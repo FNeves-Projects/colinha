@@ -23,6 +23,7 @@ function candidateInitials(candidate: CandidateSummary) {
 
 function PickerPhoto({ candidate }: { candidate: CandidateSummary }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const initials = candidateInitials(candidate);
 
   useEffect(() => {
     setImageFailed(false);
@@ -45,8 +46,8 @@ function PickerPhoto({ candidate }: { candidate: CandidateSummary }) {
   }
 
   return (
-    <span className="candidate-photo candidate-initials" aria-hidden="true">
-      {candidateInitials(candidate)}
+    <span className="candidate-photo candidate-initials" role="img" aria-label={`Iniciais de ${candidate.ballotName}`}>
+      {initials}
     </span>
   );
 }
@@ -192,32 +193,56 @@ function PickerCandidatePreview({
   );
 }
 
+function PickerSpecialPreview({
+  selection,
+  digits,
+}: {
+  selection: OfficeSelection;
+  digits: number;
+}) {
+  if (selection?.type !== "special") return null;
+  if (selection.vote === "nulo") {
+    return <PickerNumberBoxes number={nullBallotNumber(digits)} digits={digits} />;
+  }
+  if (selection.vote === "branco") {
+    return <UrnaBrancoLabel compact />;
+  }
+  return null;
+}
+
 function VoteOptionButtons({
   pendingSelection,
   onPickSpecial,
   onConfirm,
-  onRemoveFromColinha,
+  onCorrige,
   currentSelection = null,
 }: {
   pendingSelection: OfficeSelection;
   onPickSpecial: (vote: SpecialVoteKind) => void;
   onConfirm: () => void;
-  onRemoveFromColinha?: () => void;
+  onCorrige?: () => void;
   currentSelection?: OfficeSelection;
 }) {
   const canConfirm = Boolean(pendingSelection);
-  const hasColinhaSelection = Boolean(onRemoveFromColinha && currentSelection && selectionPickerLabel(currentSelection));
-  const canCorrige = hasColinhaSelection;
+  const hasColinhaSelection = Boolean(currentSelection && selectionPickerLabel(currentSelection));
+  const canCorrige = Boolean(onCorrige && (pendingSelection || hasColinhaSelection));
   const canPickSpecial = !hasColinhaSelection;
 
   return (
-    <div className="vote-options picker-vote-options">
+    <>
+      {!canPickSpecial && (
+        <p className="picker-vote-hint" id="picker-special-vote-hint" role="status">
+          Use <strong>Corrige</strong> para remover a escolha atual antes de votar nulo ou branco.
+        </p>
+      )}
+      <div className="vote-options picker-vote-options">
       <button
         type="button"
         className={`vote-option vote-option-null vote-option-null-urna${pendingSelection?.type === "special" && pendingSelection.vote === "nulo" ? " is-pending" : ""}`}
         onClick={() => onPickSpecial("nulo")}
         disabled={!canPickSpecial}
         aria-label="Votar nulo"
+        aria-describedby={!canPickSpecial ? "picker-special-vote-hint" : undefined}
         aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "nulo"}
       >
         <UrnaNuloLabel interactive />
@@ -228,6 +253,7 @@ function VoteOptionButtons({
         onClick={() => onPickSpecial("branco")}
         disabled={!canPickSpecial}
         aria-label="Votar em branco"
+        aria-describedby={!canPickSpecial ? "picker-special-vote-hint" : undefined}
         aria-pressed={pendingSelection?.type === "special" && pendingSelection.vote === "branco"}
       >
         <UrnaBrancoLabel interactive />
@@ -235,9 +261,9 @@ function VoteOptionButtons({
       <button
         type="button"
         className="vote-option vote-option-corrige vote-option-corrige-urna"
-        onClick={() => onRemoveFromColinha?.()}
+        onClick={() => onCorrige?.()}
         disabled={!canCorrige}
-        aria-label={canCorrige ? selectionRemoveLabel(currentSelection ?? null) : "Corrige"}
+        aria-label={canCorrige ? (pendingSelection ? "Corrigir seleção" : selectionRemoveLabel(currentSelection ?? null)) : "Corrige"}
       >
         <UrnaCorrigeLabel interactive />
       </button>
@@ -250,7 +276,8 @@ function VoteOptionButtons({
       >
         <UrnaConfirmaLabel interactive />
       </button>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -276,6 +303,7 @@ export function CandidatePickerPanel({
   onInspectCandidate?: (candidate: CandidateSummary, mode?: "pending" | "saved") => void;
 }) {
   const partyFilterId = useId();
+  const searchFieldId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [party, setParty] = useState("");
@@ -354,20 +382,31 @@ export function CandidatePickerPanel({
     if (presentation !== "modal") return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const focusTimer = window.setTimeout(() => searchRef.current?.focus(), 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
     return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previous;
     };
-  }, [presentation]);
+  }, [presentation, onClose]);
 
   const currentLabel = selectionPickerLabel(currentSelection);
   const pendingLabel = selectionPickerLabel(pendingSelection);
   const pendingIsSpecial = pendingSelection?.type === "special";
   const currentIsSpecial = currentSelection?.type === "special";
+  const hasColinhaSelection = Boolean(currentLabel && onClearCurrent && !office.fixed);
 
-  function handleClearCurrent() {
+  function handleCorrige() {
+    if (pendingSelection) {
+      setPendingSelection(null);
+      window.requestAnimationFrame(() => searchRef.current?.focus());
+      return;
+    }
     onClearCurrent?.();
-    setPendingSelection(null);
-    window.requestAnimationFrame(() => searchRef.current?.focus());
   }
 
   function handlePickCandidate(candidate: CandidateSummary) {
@@ -421,22 +460,13 @@ export function CandidatePickerPanel({
               ? () => onInspectCandidate(pendingCandidate, "pending")
               : undefined}
             onInspectMate={onInspectCandidate ? (mate) => onInspectCandidate(mate) : undefined}
-            special={(
-              <>
-                {pendingSelection?.type === "special" && pendingSelection.vote === "nulo" && (
-                  <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
-                )}
-                {pendingSelection?.type === "special" && pendingSelection.vote === "branco" && (
-                  <UrnaBrancoLabel compact />
-                )}
-              </>
-            )}
+            special={<PickerSpecialPreview selection={pendingSelection} digits={office.digits} />}
           />
         </div>
       )}
 
-      {currentLabel && onClearCurrent && !office.fixed && !pendingLabel && (
-        <div className="picker-current">
+      {currentLabel && onClearCurrent && !office.fixed && (
+        <div className={`picker-current${pendingLabel ? " picker-current-compact" : ""}`}>
           <PickerCandidatePreview
             kicker="Escolha atual"
             candidate={currentCandidate}
@@ -449,28 +479,22 @@ export function CandidatePickerPanel({
               ? () => onInspectCandidate(currentCandidate, "saved")
               : undefined}
             onInspectMate={onInspectCandidate ? (mate) => onInspectCandidate(mate) : undefined}
-            special={(
-              <>
-                {currentSelection?.type === "special" && currentSelection.vote === "nulo" && (
-                  <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
-                )}
-                {currentSelection?.type === "special" && currentSelection.vote === "branco" && (
-                  <UrnaBrancoLabel compact />
-                )}
-              </>
-            )}
+            special={<PickerSpecialPreview selection={currentSelection} digits={office.digits} />}
           />
         </div>
       )}
 
       <div className="picker-toolbar">
         <div className="search-field picker-search">
-          <Search size={17} />
+          <label className="sr-only" htmlFor={searchFieldId}>Buscar candidato</label>
+          <Search size={17} aria-hidden="true" />
           <input
             ref={searchRef}
+            id={searchFieldId}
             value={query}
             inputMode="search"
             autoComplete="off"
+            aria-label="Busque candidato por nome ou número"
             placeholder="Busque candidato por nome ou número"
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -491,7 +515,7 @@ export function CandidatePickerPanel({
         </label>
       </div>
 
-      <div className="picker-results" role="listbox" aria-label={`Resultados para ${office.label}`}>
+      <div className="picker-results" aria-label={`Resultados para ${office.label}`}>
         {results.map((candidate) => (
           <button
             type="button"
@@ -524,7 +548,7 @@ export function CandidatePickerPanel({
           pendingSelection={pendingSelection}
           onPickSpecial={handlePickSpecial}
           onConfirm={handleConfirm}
-          onRemoveFromColinha={onClearCurrent ? handleClearCurrent : undefined}
+          onCorrige={hasColinhaSelection || pendingSelection ? handleCorrige : undefined}
           currentSelection={currentSelection}
         />
       )}

@@ -1,31 +1,19 @@
-const URNA_NULO_BUTTON = "/urna-nulo-button.png";
-const URNA_NULO_ASPECT = 855 / 467;
+import { UrnaKeyLabel, type UrnaKeySize } from "@/components/urna-key-label";
 
 type UrnaNuloLabelProps = {
   compact?: boolean;
+  profile?: boolean;
   interactive?: boolean;
   className?: string;
 };
 
-export function UrnaNuloLabel({
-  compact = false,
-  interactive = false,
-  className = "",
-}: UrnaNuloLabelProps) {
-  const width = compact ? 88 : 110;
-  const height = Math.round(width / URNA_NULO_ASPECT);
+function resolveSize({ compact, profile }: UrnaNuloLabelProps): UrnaKeySize {
+  if (profile) return "profile";
+  if (compact) return "compact";
+  return "default";
+}
 
-  return (
-    <span
-      className={`urna-key-button urna-nulo-button${compact ? " urna-nulo-button--compact" : ""}${interactive ? " urna-key-button--interactive" : ""}${className ? ` ${className}` : ""}`}
-      style={{
-        width,
-        height,
-        backgroundImage: `url("${URNA_NULO_BUTTON}")`,
-      }}
-      role="img"
-      aria-hidden={interactive ? true : undefined}
-      aria-label={interactive ? undefined : "Nulo"}
-    />
-  );
+export function UrnaNuloLabel(props: UrnaNuloLabelProps) {
+  const { interactive = false, className = "" } = props;
+  return <UrnaKeyLabel kind="nulo" size={resolveSize(props)} interactive={interactive} className={className} />;
 }

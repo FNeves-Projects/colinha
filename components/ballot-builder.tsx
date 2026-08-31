@@ -859,6 +859,15 @@ function ProposalPdfModal({
   const previewUrl = proposalPdfApiUrl(proposal);
   const downloadUrl = proposalPdfApiUrl(proposal, true);
   const fileName = proposalDownloadFileName(proposal.title);
+  const [mobileView, setMobileView] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 960px)");
+    const sync = () => setMobileView(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -899,8 +908,28 @@ function ProposalPdfModal({
             <X size={21} />
           </button>
         </div>
-        <div className="pdf-preview-frame-wrap">
-          <iframe ref={frameRef} className="pdf-preview-frame" src={previewUrl} title={proposal.title} />
+        <div className={`pdf-preview-frame-wrap${mobileView ? " pdf-preview-frame-wrap--mobile" : ""}`}>
+          {mobileView && (
+            <a
+              className="btn-glass btn-glass--md pdf-preview-open-link"
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink size={16} aria-hidden="true" />
+              Abrir PDF em tela cheia
+            </a>
+          )}
+          {mobileView ? (
+            <embed
+              className="pdf-preview-embed"
+              src={previewUrl}
+              type="application/pdf"
+              title={proposal.title}
+            />
+          ) : (
+            <iframe ref={frameRef} className="pdf-preview-frame" src={previewUrl} title={proposal.title} />
+          )}
         </div>
         <div className="pdf-preview-actions">
           <button className="btn-glass btn-glass--lg" type="button" onClick={handleDownload}>
@@ -1074,12 +1103,14 @@ function ProfileAssetsHeaderStats({ total, count }: { total: number; count: numb
 
 function ProfileContent({
   candidate,
+  ballotDigits,
   detailsLoading = false,
   onInspectMate,
   onPrefetchMate,
   pickerAction,
 }: {
   candidate: Candidate;
+  ballotDigits: number;
   detailsLoading?: boolean;
   onInspectMate?: (candidate: CandidateSummary) => void;
   onPrefetchMate?: (candidate: CandidateSummary) => void;
@@ -1146,7 +1177,7 @@ function ProfileContent({
           <p>{candidate.fullName}{age ? ` · ${age} anos` : ""}</p>
           <span className="party-pill">{formatPartyProfileLabel(candidate.partyAcronym)}</span>
           <div className="profile-number">
-            <NumberBoxes number={candidate.ballotNumber} digits={candidate.ballotNumber.length} />
+            <NumberBoxes number={candidate.ballotNumber} digits={ballotDigits} />
             {pickerAction?.mode === "pending" && pickerAction.onConfirm && (
               <button
                 type="button"
@@ -1289,6 +1320,7 @@ function ProfileContent({
 
 function CandidateProfile({
   candidate,
+  ballotDigits,
   presentation,
   detailsLoading = false,
   onClose,
@@ -1297,6 +1329,7 @@ function CandidateProfile({
   pickerAction,
 }: {
   candidate: Candidate;
+  ballotDigits: number;
   presentation: "inline" | "modal";
   detailsLoading?: boolean;
   onClose: () => void;
@@ -1308,9 +1341,18 @@ function CandidateProfile({
     onRemove?: () => void;
   };
 }) {
+  useEffect(() => {
+    if (presentation !== "modal") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [presentation, onClose]);
+
   if (presentation === "modal") {
     return (
-      <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="drawer-backdrop profile-backdrop" role="presentation" onMouseDown={onClose}>
         <aside
           className="profile-drawer"
           role="dialog"
@@ -1323,6 +1365,7 @@ function CandidateProfile({
           </button>
           <ProfileContent
             candidate={candidate}
+            ballotDigits={ballotDigits}
             detailsLoading={detailsLoading}
             onInspectMate={onInspectMate}
             onPrefetchMate={onPrefetchMate}
@@ -1344,6 +1387,7 @@ function CandidateProfile({
       </button>
       <ProfileContent
         candidate={candidate}
+        ballotDigits={ballotDigits}
         detailsLoading={detailsLoading}
         onInspectMate={onInspectMate}
         onPrefetchMate={onPrefetchMate}
@@ -1633,6 +1677,12 @@ export function BallotBuilder() {
       return selectionMatchesCandidate(selections[office.id], profile);
     }) ?? null;
   }, [profile, selections]);
+
+  const profileBallotDigits = useMemo(() => {
+    if (!profile) return 0;
+    const office = OFFICES.find((item) => profileMatchesPickerOffice(profile, item));
+    return office?.digits ?? profile.ballotNumber.length;
+  }, [profile]);
 
   const profilePickerAction = useMemo(() => {
     if (!profile) return undefined;
@@ -2093,6 +2143,7 @@ export function BallotBuilder() {
           {showInlineProfile && profile ? (
             <CandidateProfile
               candidate={profile}
+              ballotDigits={profileBallotDigits}
               presentation="inline"
               detailsLoading={profileDetailsLoading}
               onClose={closeProfile}
@@ -2229,18 +2280,6 @@ export function BallotBuilder() {
         <p>Ferramenta de campanha. Antes de votar, confirme a situação e os dados oficiais da candidatura no TSE.</p>
       </footer>
 
-      {profile && mobilePicker && (
-        <CandidateProfile
-          candidate={profile}
-          presentation="modal"
-          detailsLoading={profileDetailsLoading}
-          onClose={closeProfile}
-          onInspectMate={profileFromPicker ? inspectCandidateMateFromProfile : inspectCandidate}
-          onPrefetchMate={prefetchCandidateProfile}
-          pickerAction={profilePickerAction}
-        />
-      )}
-
       {showModalPicker && pickerOffice && (
         <CandidatePickerPanel
           office={pickerOffice}
@@ -2255,6 +2294,19 @@ export function BallotBuilder() {
             if (mode) inspectCandidateFromPicker(candidate, mode);
             else openProfileFromPicker(candidate);
           }}
+        />
+      )}
+
+      {profile && mobilePicker && (
+        <CandidateProfile
+          candidate={profile}
+          ballotDigits={profileBallotDigits}
+          presentation="modal"
+          detailsLoading={profileDetailsLoading}
+          onClose={closeProfile}
+          onInspectMate={profileFromPicker ? inspectCandidateMateFromProfile : inspectCandidate}
+          onPrefetchMate={prefetchCandidateProfile}
+          pickerAction={profilePickerAction}
         />
       )}
 
