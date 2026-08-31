@@ -6,6 +6,7 @@ import { Filter, Search, X } from "lucide-react";
 import { nullBallotNumber, selectionPickerLabel, selectionRemoveLabel, type OfficeSelection, type SpecialVoteKind } from "@/lib/ballot-selections";
 import type { Office } from "@/lib/offices";
 import type { CandidateSummary } from "@/lib/types";
+import { UrnaBrancoLabel } from "@/components/urna-branco-label";
 
 function candidateInitials(candidate: CandidateSummary) {
   return candidate.ballotName
@@ -68,8 +69,8 @@ function VoteOptionButtons({
       <button type="button" className="btn-glass btn-glass--card btn-glass--card-null vote-option vote-option-null" onClick={() => onSelect("nulo")} aria-label="Votar nulo">
         <span className="vote-option-label">Nulo</span>
       </button>
-      <button type="button" className="btn-glass btn-glass--card vote-option vote-option-blank" onClick={() => onSelect("branco")} aria-label="Votar em branco">
-        <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
+      <button type="button" className="vote-option vote-option-blank vote-option-blank-urna" onClick={() => onSelect("branco")} aria-label="Votar em branco">
+        <UrnaBrancoLabel />
       </button>
     </div>
   );
@@ -206,7 +207,7 @@ export function CandidatePickerPanel({
                 <PickerNumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
               )}
               {currentSelection?.type === "special" && currentSelection.vote === "branco" && (
-                <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
+                <UrnaBrancoLabel compact />
               )}
             </div>
           </div>

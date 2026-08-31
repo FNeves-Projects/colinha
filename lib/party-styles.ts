@@ -19,6 +19,35 @@ const PARTY_STYLES: Record<string, { background: string; color: string }> = {
   MOBILIZA: { background: "#111827", color: "#ffffff" },
 };
 
+const PARTY_SIGLAS = new Set([
+  "MDB",
+  "PDT",
+  "PL",
+  "PP",
+  "PRD",
+  "PRTB",
+  "PSB",
+  "PSD",
+  "PSDB",
+  "PSOL",
+  "PT",
+]);
+
+export function partyProfileName(acronym: string) {
+  const trimmed = acronym.trim();
+  const upper = trimmed.toUpperCase();
+
+  if (upper === "PCDOB") return "PCdoB";
+  if (PARTY_SIGLAS.has(upper)) return upper;
+
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+}
+
+export function formatPartyProfileLabel(acronym: string | null | undefined) {
+  if (!acronym?.trim()) return "PARTIDO NÃO INFORMADO";
+  return `PARTIDO ${partyProfileName(acronym)}`.toUpperCase();
+}
+
 export function partyStyleForAcronym(acronym: string | null | undefined) {
   const key = acronym?.trim().toUpperCase() ?? "";
   return PARTY_STYLES[key] ?? { background: "#edf0f5", color: "#344054" };

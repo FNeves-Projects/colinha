@@ -8,7 +8,7 @@ import {
 import { normalizeSocialLinks } from "./social-links";
 import { hasTicketSlate, slateMateOfficeCodes, ticketHeadOfficeCode, ticketHeadOfficeCodeFor } from "./ticket-mates";
 import { TERESINHA_SQ_CANDIDATE } from "./tse-urls";
-import type { Candidate, CandidateProposal, CandidateSummary, SocialLink } from "./types";
+import type { Candidate, CandidateProposal, CandidateSummary, DeclaredAsset, SocialLink } from "./types";
 
 type CandidateRow = {
   id: string;
@@ -42,10 +42,19 @@ function cleanStoredValue(value: string | null) {
 
 type CandidateRelations = {
   socials: SocialLink[];
+  assets: DeclaredAsset[];
   proposals?: CandidateProposal[];
 };
 
-function mapRow(row: CandidateRow, related: CandidateRelations = { socials: [] }): Candidate {
+function mapAssetRows(rows: Array<{ asset_type: string; description: string; value: number | string }>): DeclaredAsset[] {
+  return rows.map((row) => ({
+    type: row.asset_type.trim() || "Bem declarado",
+    description: row.description.trim() || "Sem descrição",
+    value: Number(row.value) || 0,
+  }));
+}
+
+function mapRow(row: CandidateRow, related: CandidateRelations = { socials: [], assets: [] }): Candidate {
   return applyTeresinhaSlotIdentity({
     id: String(row.id),
     sqCandidate: row.sq_candidate,
@@ -68,7 +77,7 @@ function mapRow(row: CandidateRow, related: CandidateRelations = { socials: [] }
     photoUrl: cleanStoredValue(row.photo_url),
     tseUrl: cleanStoredValue(row.tse_url),
     socials: normalizeSocialLinks(related.socials),
-    assets: [],
+    assets: related.assets,
     source: row.source,
     sourceUpdatedAt: row.source_updated_at,
     proposals: related.proposals,
@@ -82,10 +91,19 @@ async function loadRelated(candidateId: string, options?: { includeProposals?: b
       WHERE candidate_id = $1 ORDER BY platform, id`,
     [candidateId],
   );
+  const assetRowsRaw = await sql.query(
+    `SELECT asset_type, description, value::float8 AS value
+       FROM declared_assets
+      WHERE candidate_id = $1
+      ORDER BY value DESC, id`,
+    [candidateId],
+  ) as Array<{ asset_type: string; description: string; value: number | string }>;
+  const assets = mapAssetRows(assetRowsRaw);
 
   if (!options?.includeProposals) {
     return {
       socials: socialRowsRaw as unknown as SocialLink[],
+      assets,
     };
   }
 
@@ -105,6 +123,7 @@ async function loadRelated(candidateId: string, options?: { includeProposals?: b
 
   return {
     socials: socialRowsRaw as unknown as SocialLink[],
+    assets,
     proposals,
   };
 }
@@ -363,6 +382,7 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   const candidate = mapRow(row, {
     ...related,
     proposals: includeProposals ? related.proposals : [],
+    assets: related.assets,
   });
   return hydrateCandidateDetails(candidate);
 }

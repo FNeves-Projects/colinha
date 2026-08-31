@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import {
   ArrowLeftRight,
   Check,
+  ChevronDown,
   ExternalLink,
   FileText,
   Info,
@@ -40,17 +41,20 @@ import {
   type SpecialVoteKind,
 } from "@/lib/ballot-selections";
 import { candidateFromSummary, candidateProfileLookupId } from "@/lib/candidates";
+import { OFFICE_CARD_PHOTO, PROFILE_HEAD_PHOTO } from "@/lib/candidate-photo-urls";
 import { formatGenderLabel } from "@/lib/candidate-live-details";
 import { officeHasGovernmentPlan, proposalDownloadFileName, proposalPdfApiUrl } from "@/lib/divulga-proposals";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
-import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
+import { partyStyleForAcronym, previewOfficeLabel, formatPartyProfileLabel } from "@/lib/party-styles";
 import { fetchTicketChapaForCandidate } from "@/lib/ticket-mate-fetch";
 import { isTicketChapaMember, slateMemberRoleLabel, slateMateRoleLabel, ticketHeadOfficeCodeFor } from "@/lib/ticket-mates";
-import { normalizeSocialLinks } from "@/lib/social-links";
+import { normalizeSocialLinks, pickPrimarySocialLink, socialSummaryPlatformLabel } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateProposal, CandidateSummary } from "@/lib/types";
 import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
+import { UrnaBrancoLabel } from "@/components/urna-branco-label";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
+import { TseSiteIcon } from "@/components/tse-site-icon";
 import { useTicketSlates } from "@/hooks/use-ticket-mates";
 
 const STORAGE_KEY = "colinha-digital-2026-v1";
@@ -60,9 +64,46 @@ const BALLOT_META_LABEL = "Eleições 2026 - São Paulo - SP";
 const PREVIEW_VICE_OFFICE_CODES = new Set([1, 3]);
 const EMPTY_TSE_VALUES = new Set(["#NULO#", "#NE", "-1"]);
 
+function SkeletonLine({ width = "100%", className = "" }: { width?: string; className?: string }) {
+  return (
+    <span
+      className={`skeleton-line ${className}`.trim()}
+      style={{ width }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function ProfileSlateSkeleton() {
+  return (
+    <div className="profile-slate-skeleton" aria-hidden="true">
+      <span className="skeleton-block profile-slate-skeleton-photo" />
+      <div className="profile-slate-skeleton-copy">
+        <SkeletonLine width="42%" />
+        <SkeletonLine width="68%" />
+      </div>
+      <SkeletonLine width="42px" className="profile-slate-skeleton-action" />
+    </div>
+  );
+}
+
+function ProfileProposalSkeleton() {
+  return (
+    <div className="profile-proposal-skeleton" aria-hidden="true">
+      <SkeletonLine width="78%" />
+      <SkeletonLine width="52%" />
+    </div>
+  );
+}
+
 function profileDetailValue(value: string | null | undefined, loading: boolean) {
   if (value) return value;
-  return loading ? "Carregando…" : "Não informada";
+  if (loading) return <SkeletonLine width="72%" />;
+  return "Não informada";
+}
+
+function formatDeclaredAssetValue(value: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
 function initialSelections(): Selections {
@@ -123,14 +164,17 @@ function sanitizeSelections(selections: Selections): Selections {
 function CandidatePhoto({
   candidate,
   size = 58,
+  height,
   className = "candidate-photo",
   priority = false,
 }: {
   candidate: CandidateSummary;
   size?: number;
+  height?: number;
   className?: string;
   priority?: boolean;
 }) {
+  const photoHeight = height ?? size;
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -147,7 +191,7 @@ function CandidatePhoto({
         src={candidate.photoUrl}
         alt={`Foto de ${candidate.ballotName}`}
         width={size}
-        height={size}
+        height={photoHeight}
         loading={priority ? "eager" : "lazy"}
         decoding="async"
         crossOrigin={candidate.photoUrl.startsWith("http") ? "anonymous" : undefined}
@@ -368,7 +412,7 @@ function BallotPreviewRow({
             <span className="ballot-row-office">{officeLabel}</span>
           </div>
           {selection.vote === "branco" ? (
-            <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
+            <UrnaBrancoLabel compact />
           ) : (
             <>
               <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
@@ -452,16 +496,21 @@ function OfficeCardFace({
 }) {
   const body = (
     <>
-      <CandidatePhoto candidate={candidate} />
+      <CandidatePhoto
+        candidate={candidate}
+        size={OFFICE_CARD_PHOTO.width}
+        height={OFFICE_CARD_PHOTO.height}
+      />
       <div className="office-card-copy">
         <div className="office-card-heading">
           <span>{headingLabel}</span>
-          {fixed && (
-            <span className="fixed-label"><LockKeyhole size={12} /> fixo</span>
-          )}
         </div>
         <strong>{candidate.ballotName}</strong>
-        <small>{[candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}</small>
+        <small>
+          {fixed
+            ? candidate.partyAcronym
+            : [candidate.partyAcronym, candidate.status].filter(Boolean).join(" · ")}
+        </small>
       </div>
     </>
   );
@@ -533,7 +582,7 @@ function SpecialVoteCard({
           <ArrowLeftRight size={16} strokeWidth={2.2} />
         </button>
         {vote === "branco" ? (
-          <span className="ballot-blank-pill ballot-blank-pill-compact">BRANCO</span>
+          <UrnaBrancoLabel compact />
         ) : (
           <NumberBoxes number={nullBallotNumber(office.digits)} digits={office.digits} />
         )}
@@ -837,12 +886,12 @@ function ProposalPdfModal({
         className="pdf-preview-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`Visualizar proposta: ${proposal.title}`}
+        aria-label={`Visualizar plano de governo: ${proposal.title}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="pdf-preview-head">
           <h2>{proposal.title}</h2>
-          <button className="btn-glass btn-glass--icon-sm drawer-close" type="button" onClick={onClose} aria-label="Fechar proposta">
+          <button className="btn-glass btn-glass--icon-sm drawer-close" type="button" onClick={onClose} aria-label="Fechar plano de governo">
             <X size={21} />
           </button>
         </div>
@@ -865,6 +914,160 @@ function ProposalPdfModal({
   );
 }
 
+function ProfileSlateList({
+  mates,
+  ticketHeadOfficeCode,
+  onInspectMate,
+  onPrefetchMate,
+}: {
+  mates: CandidateSummary[];
+  ticketHeadOfficeCode: number;
+  onInspectMate?: (candidate: CandidateSummary) => void;
+  onPrefetchMate?: (candidate: CandidateSummary) => void;
+}) {
+  if (!mates.length) return null;
+
+  return (
+    <ul className="profile-slate-list">
+      {mates.map((mate) => (
+        <li key={mate.id}>
+          <button
+            type="button"
+            className="btn-glass btn-glass--list profile-slate-card"
+            onPointerDown={() => onPrefetchMate?.(mate)}
+            onClick={() => onInspectMate?.(mate)}
+            aria-label={`Ver informações de ${mate.ballotName}`}
+          >
+            <CandidatePhoto candidate={mate} size={52} />
+            <div className="profile-slate-copy">
+              <span>{slateMemberRoleLabel(ticketHeadOfficeCode, mate.officeCode)}</span>
+              <strong>{mate.ballotName}</strong>
+            </div>
+            <span className="profile-slate-action">Ver info</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProfileTseSiteLink({ href }: { href: string }) {
+  return (
+    <a className="btn-glass btn-glass--sm btn-glass--block tse-link" href={href} target="_blank" rel="noopener noreferrer">
+      <TseSiteIcon size={28} />
+      <span className="tse-link-copy">Ver a candidatura no site do TSE</span>
+      <ExternalLink size={15} className="tse-link-arrow" aria-hidden="true" />
+    </a>
+  );
+}
+
+function ProfileCollapsibleSection({
+  title,
+  summary,
+  headerExtra,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  summary?: React.ReactNode;
+  headerExtra?: React.ReactNode;
+  defaultOpen?: boolean;
+  children?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const panelId = useId();
+  const expandable = Boolean(children);
+
+  return (
+    <section className={`profile-section profile-collapsible${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className="profile-collapsible-trigger"
+        aria-expanded={open}
+        aria-controls={expandable ? panelId : undefined}
+        disabled={!expandable}
+        onClick={() => expandable && setOpen((value) => !value)}
+      >
+        <span className="profile-collapsible-heading">
+          <span className="profile-collapsible-title">{title}</span>
+          {headerExtra}
+          {!open && summary ? <span className="profile-collapsible-summary">{summary}</span> : null}
+        </span>
+        {expandable ? (
+          <ChevronDown size={18} strokeWidth={2.2} className="profile-collapsible-chevron" aria-hidden="true" />
+        ) : null}
+      </button>
+      {open && children ? (
+        <div id={panelId} className="profile-collapsible-panel">
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ProfileSocialSummary({ socials }: { socials: ReturnType<typeof normalizeSocialLinks> }) {
+  const primary = pickPrimarySocialLink(socials);
+  if (!primary) return null;
+
+  const othersCount = socials.length - 1;
+
+  return (
+    <div className="profile-social-summary">
+      <div className="profile-social-summary-row">
+        <strong>{primary.label}</strong>
+        {othersCount > 0 ? <strong className="profile-social-summary-count">+{othersCount}</strong> : null}
+      </div>
+      <div className="profile-social-summary-row profile-social-summary-row--labels">
+        <span>{socialSummaryPlatformLabel(primary.platform)}</span>
+        {othersCount > 0 ? (
+          <span>{othersCount === 1 ? "outro link" : "outros links"}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ProfileCandidaturaSummary({
+  candidate,
+  detailsLoading,
+}: {
+  candidate: Candidate;
+  detailsLoading: boolean;
+}) {
+  return (
+    <div className="profile-collapsible-facts-preview">
+      <div>
+        <span>Ocupação</span>
+        <strong>{profileDetailValue(candidate.occupation, detailsLoading)}</strong>
+      </div>
+      <div>
+        <span>Escolaridade</span>
+        <strong>{profileDetailValue(candidate.education, detailsLoading)}</strong>
+      </div>
+      <div>
+        <span>Situação</span>
+        <strong>{profileDetailValue(candidate.status, detailsLoading)}</strong>
+      </div>
+    </div>
+  );
+}
+
+function ProfileAssetsHeaderStats({ total, count }: { total: number; count: number }) {
+  return (
+    <div className="profile-collapsible-stats">
+      <div className="profile-collapsible-stat">
+        <span>Total declarado</span>
+        <strong>{formatDeclaredAssetValue(total)}</strong>
+      </div>
+      <div className="profile-collapsible-stat">
+        <span>Bens</span>
+        <strong>{count}</strong>
+      </div>
+    </div>
+  );
+}
+
 function ProfileContent({
   candidate,
   detailsLoading = false,
@@ -877,6 +1080,7 @@ function ProfileContent({
   onPrefetchMate?: (candidate: CandidateSummary) => void;
 }) {
   const [ticketSlate, setTicketSlate] = useState<CandidateSummary[]>([]);
+  const [slateLoading, setSlateLoading] = useState(() => isTicketChapaMember(candidate.officeCode));
   const [proposalPreview, setProposalPreview] = useState<CandidateProposal | null>(null);
   const age = candidate.birthDate
     ? new Date(2026, 9, 4).getFullYear() - new Date(candidate.birthDate).getFullYear()
@@ -890,124 +1094,161 @@ function ProfileContent({
   useEffect(() => {
     if (!isTicketChapaMember(candidate.officeCode)) {
       setTicketSlate([]);
+      setSlateLoading(false);
       return;
     }
 
+    setSlateLoading(true);
     const controller = new AbortController();
     void fetchTicketChapaForCandidate(candidate, controller.signal)
-      .then(setTicketSlate)
+      .then((slate) => {
+        if (!controller.signal.aborted) setTicketSlate(slate);
+      })
       .catch(() => {
         if (!controller.signal.aborted) setTicketSlate([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSlateLoading(false);
       });
 
     return () => controller.abort();
   }, [candidate.id, candidate.officeCode, candidate.ballotNumber, candidate.uf]);
 
   const ticketHeadOfficeCode = ticketHeadOfficeCodeFor(candidate.officeCode);
+  const slateMates = ticketSlate.filter((mate) => mate.id !== candidate.id);
   const showProposals = officeHasGovernmentPlan(candidate.officeCode);
   const proposals = candidate.proposals;
   const proposalsLoading = showProposals && (detailsLoading || (proposals === undefined && Boolean(candidate.sqCandidate)));
+  const profileBusy = detailsLoading || proposalsLoading || slateLoading;
+  const declaredAssetsTotal = candidate.assets.reduce((total, asset) => total + asset.value, 0);
 
   return (
     <>
       <div className="profile-kicker">{candidate.officeName} · {candidate.uf} · Eleição 2026</div>
       <div className="profile-head">
-        <CandidatePhoto candidate={candidate} size={92} />
-        <div>
+        <CandidatePhoto
+          candidate={candidate}
+          size={PROFILE_HEAD_PHOTO.width}
+          height={PROFILE_HEAD_PHOTO.height}
+        />
+        <div className="profile-head-copy">
           <h2>{candidate.ballotName}</h2>
           <p>{candidate.fullName}{age ? ` · ${age} anos` : ""}</p>
-          <span className="party-pill">{candidate.partyAcronym ?? "Partido não informado"}</span>
+          <span className="party-pill">{formatPartyProfileLabel(candidate.partyAcronym)}</span>
+          <div className="profile-number">
+            <NumberBoxes number={candidate.ballotNumber} digits={candidate.ballotNumber.length} />
+          </div>
         </div>
       </div>
-      <div className="profile-number"><NumberBoxes number={candidate.ballotNumber} digits={candidate.ballotNumber.length} /></div>
 
-      <section className="profile-section">
-        <h3>Candidatura</h3>
-        <div className="facts-grid">
-          <div><span>Situação</span><strong>{profileDetailValue(candidate.status, detailsLoading)}</strong></div>
-          <div><span>Ocupação</span><strong>{profileDetailValue(candidate.occupation, detailsLoading)}</strong></div>
-          <div><span>Escolaridade</span><strong>{profileDetailValue(candidate.education, detailsLoading)}</strong></div>
-          <div><span>Gênero</span><strong>{profileDetailValue(formatGenderLabel(candidate.gender), detailsLoading)}</strong></div>
-          <div><span>Estado civil</span><strong>{profileDetailValue(candidate.maritalStatus, detailsLoading)}</strong></div>
-          <div><span>Nacionalidade</span><strong>{profileDetailValue(candidate.nationality, detailsLoading)}</strong></div>
-          <div><span>Naturalidade</span><strong>{profileDetailValue(candidate.birthplace, detailsLoading)}</strong></div>
-          <div><span>Fonte</span><strong>{candidate.source}</strong></div>
-        </div>
-        {ticketSlate.length > 0 && ticketHeadOfficeCode !== null && (
-          <div className="profile-slate-block">
-            <h4>Chapa</h4>
-            <ul className="profile-slate-list">
-              {ticketSlate.map((mate) => (
-                <li key={mate.id}>
-                  <button
-                    type="button"
-                    className="btn-glass btn-glass--list profile-slate-card"
-                    onPointerDown={() => onPrefetchMate?.(mate)}
-                    onClick={() => onInspectMate?.(mate)}
-                    aria-label={`Ver informações de ${mate.ballotName}`}
-                  >
-                    <CandidatePhoto candidate={mate} size={52} />
-                    <div className="profile-slate-copy">
-                      <span>{slateMemberRoleLabel(ticketHeadOfficeCode, mate.officeCode)}</span>
-                      <strong>{mate.ballotName}</strong>
-                    </div>
-                    <span className="profile-slate-action">Ver info</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+      <div className="profile-body" aria-busy={profileBusy}>
+        {(slateLoading || slateMates.length > 0) && ticketHeadOfficeCode !== null && (
+          <div className="profile-slate-after-number">
+            {slateLoading ? (
+              <ProfileSlateSkeleton />
+            ) : (
+              <ProfileSlateList
+                mates={slateMates}
+                ticketHeadOfficeCode={ticketHeadOfficeCode}
+                onInspectMate={onInspectMate}
+                onPrefetchMate={onPrefetchMate}
+              />
+            )}
           </div>
         )}
-      </section>
 
-      {showProposals && (
-        <section className="profile-section">
-          <h3>Propostas</h3>
-          <p className="source-note">Plano de governo registrado no TSE.</p>
-          {proposalsLoading ? (
-            <p className="profile-proposals-status">Carregando…</p>
-          ) : (proposals?.length ?? 0) > 0 ? (
-            <div className="profile-proposals-list">
-              {proposals?.map((proposal) => (
-                <button
-                  type="button"
-                  className="btn-glass btn-glass--sm profile-proposal-button"
-                  onClick={() => setProposalPreview(proposal)}
-                  key={proposal.id}
-                >
-                  <span className="profile-proposal-button-copy">
-                    <FileText size={14} aria-hidden="true" />
-                    {proposal.title}
-                  </span>
-                  <span className="profile-proposal-button-action">Ler proposta</span>
-                </button>
+        {showProposals && (
+          <section className="profile-section">
+            <h3>Plano de governo</h3>
+            <p className="source-note">Documento registrado no TSE.</p>
+            {proposalsLoading ? (
+              <ProfileProposalSkeleton />
+            ) : (proposals?.length ?? 0) > 0 ? (
+              <div className="profile-action-list">
+                {proposals?.map((proposal) => (
+                  <button
+                    type="button"
+                    className="profile-action-chip"
+                    onClick={() => setProposalPreview(proposal)}
+                    key={proposal.id}
+                  >
+                    <span className="profile-action-icon profile-action-icon--plan">
+                      <FileText size={18} strokeWidth={2.1} aria-hidden="true" />
+                    </span>
+                    <span className="profile-action-label">Ler plano</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="profile-proposals-status">Não informada pelo TSE.</p>
+            )}
+          </section>
+        )}
+
+        {tseHref && <ProfileTseSiteLink href={tseHref} />}
+
+        <ProfileCollapsibleSection
+          title="Candidatura"
+          summary={<ProfileCandidaturaSummary candidate={candidate} detailsLoading={detailsLoading} />}
+        >
+          <div className="facts-grid">
+            <div><span>Situação</span><strong>{profileDetailValue(candidate.status, detailsLoading)}</strong></div>
+            <div><span>Ocupação</span><strong>{profileDetailValue(candidate.occupation, detailsLoading)}</strong></div>
+            <div><span>Escolaridade</span><strong>{profileDetailValue(candidate.education, detailsLoading)}</strong></div>
+            <div><span>Gênero</span><strong>{profileDetailValue(formatGenderLabel(candidate.gender), detailsLoading)}</strong></div>
+            <div><span>Estado civil</span><strong>{profileDetailValue(candidate.maritalStatus, detailsLoading)}</strong></div>
+            <div><span>Nacionalidade</span><strong>{profileDetailValue(candidate.nationality, detailsLoading)}</strong></div>
+            <div><span>Naturalidade</span><strong>{profileDetailValue(candidate.birthplace, detailsLoading)}</strong></div>
+            <div><span>Fonte</span><strong>{candidate.source}</strong></div>
+          </div>
+        </ProfileCollapsibleSection>
+
+        {socials.length > 0 && (
+          <ProfileCollapsibleSection
+            title="Redes e site"
+            summary={<ProfileSocialSummary socials={socials} />}
+          >
+            <p className="source-note">Links declarados à Justiça Eleitoral.</p>
+            <div className="profile-action-list">
+              {socials.map((social) => (
+                <a className="profile-action-chip" href={social.url} target="_blank" rel="noopener noreferrer" key={social.url}>
+                  <SocialNetworkIcon platform={social.platform} />
+                  <span className="profile-action-label">{social.label}</span>
+                </a>
               ))}
             </div>
-          ) : (
-            <p className="profile-proposals-status">Não informada pelo TSE.</p>
-          )}
-        </section>
-      )}
+          </ProfileCollapsibleSection>
+        )}
 
-      {socials.length > 0 && (
-        <section className="profile-section">
-          <h3>Redes e site</h3>
-          <p className="source-note">Links declarados à Justiça Eleitoral.</p>
-          <div className="social-links">
-            {socials.map((social) => (
-              <a className="btn-glass btn-glass--sm" href={social.url} target="_blank" rel="noopener noreferrer" key={social.url}>
-                <SocialNetworkIcon platform={social.platform} /> {social.label} <ExternalLink size={13} />
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {tseHref && (
-        <a className="btn-glass btn-glass--sm btn-glass--block tse-link" href={tseHref} target="_blank" rel="noopener noreferrer">
-          Ver candidato no site do TSE <ExternalLink size={15} />
-        </a>
-      )}
+        <ProfileCollapsibleSection
+          title="Bens declarados"
+          defaultOpen={candidate.assets.length > 0}
+          summary={
+            candidate.assets.length > 0 ? undefined : (
+              <span className="profile-collapsible-muted">Não informados pelo TSE.</span>
+            )
+          }
+          headerExtra={
+            candidate.assets.length > 0 ? (
+              <ProfileAssetsHeaderStats total={declaredAssetsTotal} count={candidate.assets.length} />
+            ) : null
+          }
+        >
+          {candidate.assets.length > 0 ? (
+            <>
+              <p className="source-note">Patrimônio declarado à Justiça Eleitoral.</p>
+              <ul className="asset-list">
+                {candidate.assets.map((asset, index) => (
+                  <li key={`${asset.type}-${asset.description}-${index}`}>
+                    <span>{asset.type} · {asset.description}</span>
+                    <strong>{formatDeclaredAssetValue(asset.value)}</strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </ProfileCollapsibleSection>
+      </div>
 
       {proposalPreview && (
         <ProposalPdfModal proposal={proposalPreview} onClose={() => setProposalPreview(null)} />
@@ -1805,10 +2046,10 @@ export function BallotBuilder() {
                     onClick={saveBallot}
                     disabled={working !== null}
                     aria-busy={working === "save"}
-                    aria-label="Salvar colinha como arquivo PNG"
+                    aria-label="Salvar colinha como imagem"
                   >
                     {working === "save" ? <span className="button-spinner" aria-hidden="true" /> : <Save size={18} strokeWidth={2.2} aria-hidden="true" />}
-                    Salvar PNG
+                    Salvar Imagem
                   </button>
                   <button
                     className="btn-glass btn-glass--primary btn-glass--lg share-button"
