@@ -52,11 +52,10 @@ import { isTicketChapaMember, slateMemberRoleLabel, slateMateRoleLabel, ticketHe
 import { normalizeSocialLinks, pickPrimarySocialLink, socialSummaryPlatformLabel } from "@/lib/social-links";
 import { tseCandidateUrl } from "@/lib/tse-urls";
 import type { Candidate, CandidateProposal, CandidateSummary } from "@/lib/types";
-import { CampaignDisclaimer } from "@/components/campaign-disclaimer";
-import { DataFreshnessNote } from "@/components/data-freshness-note";
 import { CandidatePickerPanel } from "@/components/candidate-picker-panel";
 import { FixedSlotBadge } from "@/components/fixed-slot-badge";
 import { PickerActionButton } from "@/components/picker-action-button";
+import { SiteFooter } from "@/components/site-footer";
 import { SpecialVoteBadge } from "@/components/special-vote-badge";
 import { SocialNetworkIcon } from "@/components/social-network-icon";
 import { TseSiteIcon } from "@/components/tse-site-icon";
@@ -2235,13 +2234,7 @@ export function BallotBuilder() {
         </aside>
       </div>
 
-      <footer className="site-footer">
-        <div className="footer-brand">colinha<span>.2026</span></div>
-        <div className="footer-copy">
-          <CampaignDisclaimer />
-          <DataFreshnessNote freshness={dataFreshness} />
-        </div>
-      </footer>
+      <SiteFooter freshness={dataFreshness} />
 
       {showModalPicker && pickerOffice && (
         <CandidatePickerPanel
