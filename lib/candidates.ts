@@ -1,5 +1,5 @@
 import { getSql, hasDatabase } from "./db";
-import { resolveStoredProposalUrl } from "./divulga-proposals";
+import { officeHasGovernmentPlan, resolveStoredProposalUrl } from "./divulga-proposals";
 import {
   applyTeresinhaSlotIdentity,
   isTeresinhaCandidate,
@@ -143,6 +143,7 @@ async function hydrateCandidateDetails(candidate: Candidate): Promise<Candidate>
   const bundle = await fetchCandidateLiveBundle({
     sqCandidate: candidate.sqCandidate,
     uf: candidate.uf,
+    officeCode: candidate.officeCode,
   });
   return mergeCandidateLiveBundle(candidate, bundle);
 }
@@ -357,6 +358,11 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   ) as CandidateRow[];
   const row = rows[0];
   if (!row) return null;
-  const related = await loadRelated(row.id, { includeProposals: true });
-  return hydrateCandidateDetails(mapRow(row, related));
+  const includeProposals = officeHasGovernmentPlan(row.office_code);
+  const related = await loadRelated(row.id, { includeProposals });
+  const candidate = mapRow(row, {
+    ...related,
+    proposals: includeProposals ? related.proposals : [],
+  });
+  return hydrateCandidateDetails(candidate);
 }

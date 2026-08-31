@@ -1,6 +1,6 @@
 import "server-only";
 
-import { extractProposalsFromDivulgaFiles } from "./divulga-proposals";
+import { extractProposalsFromDivulgaFiles, officeHasGovernmentPlan } from "./divulga-proposals";
 import { normalizeCandidateUf, TSE_ELECTION_ID_2026 } from "./tse-urls";
 import type { CandidateProposal } from "./types";
 
@@ -20,9 +20,10 @@ export { tseProposalDocumentUrl } from "./divulga-proposals";
 export async function getCandidateProposals(input: {
   sqCandidate: string;
   uf: string;
+  officeCode: number;
 }): Promise<CandidateProposal[]> {
   const sqCandidate = input.sqCandidate.trim();
-  if (!sqCandidate) return [];
+  if (!sqCandidate || !officeHasGovernmentPlan(input.officeCode)) return [];
 
   const uf = normalizeCandidateUf(input.uf);
   const url = `${DIVULGA_BASE}/rest/v1/candidatura/buscar/2026/${uf}/${TSE_ELECTION_ID_2026}/candidato/${sqCandidate}`;

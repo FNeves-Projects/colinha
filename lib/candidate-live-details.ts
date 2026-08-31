@@ -1,4 +1,4 @@
-import { extractProposalsFromDivulgaFiles } from "./divulga-proposals";
+import { extractProposalsFromDivulgaFiles, officeHasGovernmentPlan } from "./divulga-proposals";
 import { normalizeCandidateUf, TSE_ELECTION_ID_2026 } from "./tse-urls";
 import type { Candidate, CandidateProposal } from "./types";
 
@@ -95,7 +95,8 @@ export function candidateNeedsLiveDetails(
   );
 }
 
-export function candidateNeedsLiveProposals(candidate: Pick<Candidate, "proposals">) {
+export function candidateNeedsLiveProposals(candidate: Pick<Candidate, "proposals" | "officeCode">) {
+  if (!officeHasGovernmentPlan(candidate.officeCode)) return false;
   return candidate.proposals === undefined;
 }
 
@@ -121,9 +122,12 @@ async function fetchDivulgaDetail(input: { sqCandidate: string; uf: string }) {
 export async function fetchCandidateLiveBundle(input: {
   sqCandidate: string;
   uf: string;
+  officeCode: number;
 }): Promise<CandidateLiveBundle | null> {
   const detail = await fetchDivulgaDetail(input);
   if (!detail) return null;
+
+  const arquivos = Array.isArray(detail.arquivos) ? detail.arquivos : [];
 
   return {
     details: {
@@ -136,7 +140,9 @@ export async function fetchCandidateLiveBundle(input: {
       nationality: cleanLiveValue(detail.nacionalidade),
       birthplace: formatBirthplace(detail),
     },
-    proposals: extractProposalsFromDivulgaFiles(Array.isArray(detail.arquivos) ? detail.arquivos : []),
+    proposals: officeHasGovernmentPlan(input.officeCode)
+      ? extractProposalsFromDivulgaFiles(arquivos)
+      : [],
   };
 }
 
@@ -144,6 +150,7 @@ export async function fetchCandidateLiveBundle(input: {
 export async function fetchCandidateLiveDetails(input: {
   sqCandidate: string;
   uf: string;
+  officeCode?: number;
 }): Promise<
   Partial<
     Pick<
@@ -159,13 +166,18 @@ export async function fetchCandidateLiveDetails(input: {
     >
   > | null
 > {
-  const bundle = await fetchCandidateLiveBundle(input);
+  const bundle = await fetchCandidateLiveBundle({
+    sqCandidate: input.sqCandidate,
+    uf: input.uf,
+    officeCode: input.officeCode ?? 0,
+  });
   return bundle?.details ?? null;
 }
 
 export function mergeCandidateLiveBundle(candidate: Candidate, bundle: CandidateLiveBundle | null): Candidate {
   if (!bundle) {
-    return candidate.proposals === undefined ? { ...candidate, proposals: [] } : candidate;
+    if (candidate.proposals !== undefined || !officeHasGovernmentPlan(candidate.officeCode)) return candidate;
+    return { ...candidate, proposals: [] };
   }
 
   return {
@@ -178,7 +190,7 @@ export function mergeCandidateLiveBundle(candidate: Candidate, bundle: Candidate
     maritalStatus: candidate.maritalStatus ?? bundle.details.maritalStatus ?? null,
     nationality: candidate.nationality ?? bundle.details.nationality ?? null,
     birthplace: candidate.birthplace ?? bundle.details.birthplace ?? null,
-    proposals: bundle.proposals,
+    proposals: officeHasGovernmentPlan(candidate.officeCode) ? bundle.proposals : [],
   };
 }
 

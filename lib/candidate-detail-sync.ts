@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { candidateProposalPublicUrl } from "./candidate-proposal-urls";
 import { formatBirthplace } from "./candidate-live-details";
-import { extractProposalsFromDivulgaFiles, tseProposalDocumentUrl } from "./divulga-proposals";
+import { extractProposalsFromDivulgaFiles, officeHasGovernmentPlan, tseProposalDocumentUrl } from "./divulga-proposals";
 import { getSql } from "./db";
 import { normalizeCandidateUf, TSE_ELECTION_ID_2026 } from "./tse-urls";
 import type { CandidateProposal } from "./types";
@@ -30,6 +30,7 @@ type CandidateDetailRow = {
   id: string;
   sq_candidate: string;
   uf: string;
+  office_code: number;
 };
 
 export type CandidateDetailSyncResult = {
@@ -182,7 +183,7 @@ export async function syncCandidateDetails(
   const onProgress = options.onProgress;
 
   const rows = await sql.query(
-    `SELECT id::text, sq_candidate, uf
+    `SELECT id::text, sq_candidate, uf, office_code
        FROM candidates
       WHERE election_year = 2026
         AND uf IN ('SP', 'BR')
@@ -227,7 +228,9 @@ export async function syncCandidateDetails(
         [row.id, nationality, birthplace, gender, maritalStatus],
       );
 
-      const extracted = extractProposalsFromDivulgaFiles(Array.isArray(detail.arquivos) ? detail.arquivos : []);
+      const extracted = officeHasGovernmentPlan(row.office_code)
+        ? extractProposalsFromDivulgaFiles(Array.isArray(detail.arquivos) ? detail.arquivos : [])
+        : [];
       const storedProposals: CandidateProposal[] = [];
 
       for (const proposal of extracted) {

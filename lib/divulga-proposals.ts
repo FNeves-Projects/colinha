@@ -3,7 +3,10 @@ import type { CandidateProposal } from "./types";
 
 const DIVULGA_BASE = "https://divulgacandcontas.tse.jus.br/divulga";
 const GOVERNMENT_PLAN_COD_TIPO = "5";
-const LEGISLATIVE_PROPOSAL_PATTERN = /DEPUTADO FEDERAL|DEPUTADO ESTADUAL|SENADOR/i;
+
+export function officeHasGovernmentPlan(officeCode: number) {
+  return officeCode === 1 || officeCode === 3;
+}
 
 type DivulgaFile = {
   idArquivo?: number | string;
@@ -35,22 +38,12 @@ export function proposalPdfApiUrl(proposal: Pick<CandidateProposal, "id" | "url"
 
 function isPublicProposalFile(file: DivulgaFile) {
   if (file.anonimizado === "S") return false;
-  if (file.codTipo === GOVERNMENT_PLAN_COD_TIPO) return true;
-  const name = file.nome?.trim() ?? "";
-  return /^pje-/i.test(name) && LEGISLATIVE_PROPOSAL_PATTERN.test(name);
+  return file.codTipo === GOVERNMENT_PLAN_COD_TIPO;
 }
 
 function proposalTitle(file: DivulgaFile) {
-  if (file.codTipo === GOVERNMENT_PLAN_COD_TIPO) {
-    const name = file.nome?.trim();
-    return name ? name.replace(/\.pdf$/i, "").trim() : "Plano de governo";
-  }
-  return "Ver proposta";
-}
-
-function proposalSortRank(file: DivulgaFile) {
-  if (file.codTipo === GOVERNMENT_PLAN_COD_TIPO) return 0;
-  return 1;
+  const name = file.nome?.trim();
+  return name ? name.replace(/\.pdf$/i, "").trim() : "Plano de governo";
 }
 
 export function extractProposalsFromDivulgaFiles(files: DivulgaFile[]): CandidateProposal[] {
@@ -58,7 +51,6 @@ export function extractProposalsFromDivulgaFiles(files: DivulgaFile[]): Candidat
 
   return files
     .filter(isPublicProposalFile)
-    .sort((left, right) => proposalSortRank(left) - proposalSortRank(right))
     .flatMap((file) => {
       const id = String(file.idArquivo ?? "").trim();
       if (!id || seen.has(id)) return [];

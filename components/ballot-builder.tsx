@@ -41,7 +41,7 @@ import {
 } from "@/lib/ballot-selections";
 import { candidateFromSummary, candidateProfileLookupId } from "@/lib/candidates";
 import { formatGenderLabel } from "@/lib/candidate-live-details";
-import { proposalDownloadFileName, proposalPdfApiUrl } from "@/lib/divulga-proposals";
+import { officeHasGovernmentPlan, proposalDownloadFileName, proposalPdfApiUrl } from "@/lib/divulga-proposals";
 import { partyLogoUrl, partyBadgeFallback } from "@/lib/party-logos";
 import { partyStyleForAcronym, previewOfficeLabel } from "@/lib/party-styles";
 import { fetchTicketChapaForCandidate } from "@/lib/ticket-mate-fetch";
@@ -781,6 +781,8 @@ function CandidatePicker({
 
 function profileNeedsRefresh(candidate: Candidate | undefined) {
   if (!candidate) return true;
+  const needsProposals = officeHasGovernmentPlan(candidate.officeCode)
+    && candidate.proposals === undefined;
   return (
     !candidate.status
     || !candidate.occupation
@@ -789,7 +791,7 @@ function profileNeedsRefresh(candidate: Candidate | undefined) {
     || !candidate.maritalStatus
     || !candidate.nationality
     || !candidate.birthplace
-    || candidate.proposals === undefined
+    || needsProposals
   );
 }
 
@@ -902,8 +904,9 @@ function ProfileContent({
   }, [candidate.id, candidate.officeCode, candidate.ballotNumber, candidate.uf]);
 
   const ticketHeadOfficeCode = ticketHeadOfficeCodeFor(candidate.officeCode);
+  const showProposals = officeHasGovernmentPlan(candidate.officeCode);
   const proposals = candidate.proposals;
-  const proposalsLoading = detailsLoading || (proposals === undefined && Boolean(candidate.sqCandidate));
+  const proposalsLoading = showProposals && (detailsLoading || (proposals === undefined && Boolean(candidate.sqCandidate)));
 
   return (
     <>
@@ -957,32 +960,34 @@ function ProfileContent({
         )}
       </section>
 
-      <section className="profile-section">
-        <h3>Propostas</h3>
-        <p className="source-note">Documento registrado no TSE.</p>
-        {proposalsLoading ? (
-          <p className="profile-proposals-status">Carregando…</p>
-        ) : (proposals?.length ?? 0) > 0 ? (
-          <div className="profile-proposals-list">
-            {proposals?.map((proposal) => (
-              <button
-                type="button"
-                className="btn-glass btn-glass--sm profile-proposal-button"
-                onClick={() => setProposalPreview(proposal)}
-                key={proposal.id}
-              >
-                <span className="profile-proposal-button-copy">
-                  <FileText size={14} aria-hidden="true" />
-                  {proposal.title}
-                </span>
-                <span className="profile-proposal-button-action">Ler proposta</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="profile-proposals-status">Não informada pelo TSE.</p>
-        )}
-      </section>
+      {showProposals && (
+        <section className="profile-section">
+          <h3>Propostas</h3>
+          <p className="source-note">Plano de governo registrado no TSE.</p>
+          {proposalsLoading ? (
+            <p className="profile-proposals-status">Carregando…</p>
+          ) : (proposals?.length ?? 0) > 0 ? (
+            <div className="profile-proposals-list">
+              {proposals?.map((proposal) => (
+                <button
+                  type="button"
+                  className="btn-glass btn-glass--sm profile-proposal-button"
+                  onClick={() => setProposalPreview(proposal)}
+                  key={proposal.id}
+                >
+                  <span className="profile-proposal-button-copy">
+                    <FileText size={14} aria-hidden="true" />
+                    {proposal.title}
+                  </span>
+                  <span className="profile-proposal-button-action">Ler proposta</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="profile-proposals-status">Não informada pelo TSE.</p>
+          )}
+        </section>
+      )}
 
       {socials.length > 0 && (
         <section className="profile-section">

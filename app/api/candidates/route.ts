@@ -36,6 +36,7 @@ const ticketChapaSchema = z.object({
 const proposalsSchema = z.object({
   sqCandidate: z.string().trim().min(1).max(20),
   uf: z.string().trim().transform((value) => (value === "BRASIL" ? "BR" : value)).pipe(z.enum(["SP", "BR"])),
+  office: z.coerce.number().int().positive(),
 });
 
 const proposalPdfSchema = z.object({
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
       const params = proposalsSchema.safeParse({
         sqCandidate: request.nextUrl.searchParams.get("sqCandidate"),
         uf: request.nextUrl.searchParams.get("uf"),
+        office: request.nextUrl.searchParams.get("office"),
       });
       if (!params.success) {
         return NextResponse.json({ error: "Invalid proposal lookup." }, { status: 400 });
@@ -64,6 +66,7 @@ export async function GET(request: NextRequest) {
       const proposals = await getCandidateProposals({
         sqCandidate: params.data.sqCandidate,
         uf: params.data.uf,
+        officeCode: params.data.office,
       });
       return NextResponse.json({ proposals }, { headers: { "Cache-Control": "public, max-age=3600" } });
     }
