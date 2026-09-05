@@ -397,16 +397,28 @@ export function CandidatePickerPanel({
     onClearCurrent?.();
   }
 
+  function blurSearchField() {
+    const input = searchRef.current;
+    if (!input) return;
+    input.blur();
+    window.requestAnimationFrame(() => {
+      if (document.activeElement === input) input.blur();
+    });
+  }
+
   function handlePickCandidate(candidate: CandidateSummary) {
+    blurSearchField();
     setPendingSelection({ type: "candidate", candidate });
   }
 
   function handlePickSpecial(vote: SpecialVoteKind) {
+    blurSearchField();
     setPendingSelection({ type: "special", vote });
   }
 
   function handleConfirm() {
     if (!pendingSelection) return;
+    blurSearchField();
     if (pendingSelection.type === "candidate") {
       onSelect(pendingSelection.candidate);
       setPendingSelection(null);
