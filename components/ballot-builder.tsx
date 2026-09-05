@@ -510,7 +510,6 @@ function OfficeCardFace({
       <div className="office-card-copy">
         <div className="office-card-heading">
           <span>{headingLabel}</span>
-          {fixed ? <FixedSlotBadge /> : null}
         </div>
         <strong>{candidate.ballotName}</strong>
         <small>
