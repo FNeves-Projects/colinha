@@ -1,7 +1,7 @@
 import "./load-env";
 import { syncTse } from "../lib/tse-sync";
 
-syncTse()
+syncTse({ onProgress: (message) => console.log(message) })
   .then((result) => {
     console.log("Sync completed", result);
   })

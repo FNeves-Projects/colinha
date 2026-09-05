@@ -37,7 +37,7 @@ console.log(
         : "Starting full local sync...",
 );
 
-syncTse({ skipPhotos, skipDetails })
+syncTse({ skipPhotos, skipDetails, onProgress: (message) => console.log(message) })
   .then((result) => {
     console.log("Sync completed.");
     console.log(JSON.stringify(result, null, 2));

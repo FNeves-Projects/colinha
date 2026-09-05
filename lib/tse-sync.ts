@@ -656,8 +656,13 @@ async function ensureTeresinhaCampaignSource() {
   );
 }
 
-export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: boolean }) {
+export async function syncTse(options?: {
+  skipPhotos?: boolean;
+  skipDetails?: boolean;
+  onProgress?: (message: string) => void;
+}) {
   const sql = getSql();
+  const log = options?.onProgress ?? (() => undefined);
   const runRows = await sql.query(
     `INSERT INTO sync_runs (source, status) VALUES ('TSE', 'running') RETURNING id::text`,
   ) as Array<{ id: string }>;
@@ -689,15 +694,20 @@ export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: bo
       photoSyncSkippedOnVercel?: boolean;
       photoSyncHint?: string;
       snapshotUpdatedAt?: string;
+      divulgaEnrichError?: string;
     };
     try {
+      log("Downloading TSE Open Data candidate files...");
       const candidateUrls = (process.env.TSE_CANDIDATES_URLS ?? DEFAULT_CANDIDATE_URLS.join(","))
         .split(",").map((url) => url.trim()).filter(Boolean);
       const candidateGroups = await Promise.all(candidateUrls.map(downloadCsvRows));
+      log("Persisting TSE candidates...");
       const candidateCount = await upsertCandidates(candidateGroups.flat());
+      log("Downloading TSE social links...");
       const socialCount = await upsertSocials(
         await downloadCsvRows(process.env.TSE_SOCIALS_URL ?? DEFAULT_SOCIAL_URL),
       );
+      log("Downloading TSE declared assets...");
       const assetCount = await upsertAssets(
         await downloadCsvRows(process.env.TSE_ASSETS_URL ?? DEFAULT_ASSETS_URL),
       );
@@ -705,6 +715,7 @@ export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: bo
     } catch (primaryError) {
       const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
       try {
+        log("TSE Open Data failed; trying DivulgaCand candidate lists...");
         details = {
           strategy: "divulga-cand",
           ...(await syncDivulgaCand()),
@@ -715,6 +726,7 @@ export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: bo
           ? fallbackError.message
           : String(fallbackError);
         try {
+          log("DivulgaCand lists failed; trying pinned TSE mirror...");
           const candidateGroups = await Promise.all(MIRROR_CANDIDATE_URLS.map(downloadCsvRows));
           const candidateRows = candidateGroups.flat();
           const incomingUpdatedAt = latestCsvTimestamp(candidateRows);
@@ -760,8 +772,17 @@ export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: bo
       }
     }
     if (details.strategy === "tse-open-data" || details.strategy === "tse-mirror") {
-      details.divulgaEnrichCount = await enrichCandidatesFromDivulgaCand();
+      log("Checking live DivulgaCand candidate fields...");
+      try {
+        details.divulgaEnrichCount = await enrichCandidatesFromDivulgaCand();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        details.divulgaEnrichCount = 0;
+        details.divulgaEnrichError = message.slice(0, 500);
+        log(`DivulgaCand enrichment skipped: ${message.slice(0, 180)}`);
+      }
     }
+    log("Backfilling candidate photo URLs...");
     const photoBackfillCount = await backfillCandidatePhotoUrls();
     const photoSyncDetails = options?.skipPhotos
       ? {
@@ -778,7 +799,7 @@ export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: bo
           photoSyncSkippedOnVercel: false,
           photoSyncHint: "Photo sync skipped (--skip-photos).",
         }
-      : await syncCandidatePhotos().catch((error) => {
+      : await syncCandidatePhotos({ onProgress: log }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       return {
         photoSyncEnabled: process.env.VERCEL !== "1",
@@ -809,7 +830,7 @@ export async function syncTse(options?: { skipPhotos?: boolean; skipDetails?: bo
           detailSyncSkippedOnVercel: false,
           detailSyncHint: "Candidate detail sync skipped (--skip-details).",
         }
-      : await syncCandidateDetails().catch((error) => {
+      : await syncCandidateDetails({ onProgress: log }).catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
           return {
             detailSyncEnabled: process.env.VERCEL !== "1",

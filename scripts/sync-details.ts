@@ -1,5 +1,6 @@
 import "./load-env";
 import { syncCandidateDetails } from "../lib/candidate-detail-sync";
+import { getSql } from "../lib/db";
 
 const args = process.argv.slice(2);
 
@@ -36,16 +37,43 @@ if (!process.env.DATABASE_URL) {
 
 console.log("Starting candidate detail + proposal PDF sync...");
 
-syncCandidateDetails({
-  limit: parseLimitArg(),
-  forceDownload: args.includes("--force-download"),
-  onProgress: (message) => console.log(message),
-})
-  .then((result) => {
+async function main() {
+  const sql = getSql();
+  const runRows = await sql.query(
+    `INSERT INTO sync_runs (source, status, details)
+     VALUES ('TSE', 'running', '{"mode":"candidate-details"}'::jsonb)
+     RETURNING id::text`,
+  ) as Array<{ id: string }>;
+  const runId = runRows[0].id;
+
+  try {
+    const result = await syncCandidateDetails({
+      limit: parseLimitArg(),
+      forceDownload: args.includes("--force-download"),
+      onProgress: (message) => console.log(message),
+    });
+    const details = { mode: "candidate-details", ...result };
+    await sql.query(
+      `UPDATE sync_runs
+          SET status = 'success', finished_at = now(), details = $2::jsonb
+        WHERE id = $1`,
+      [runId, JSON.stringify(details)],
+    );
     console.log("Detail sync completed.");
     console.log(JSON.stringify(result, null, 2));
-  })
-  .catch((error) => {
-    console.error("Detail sync failed.", error);
-    process.exitCode = 1;
-  });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await sql.query(
+      `UPDATE sync_runs
+          SET status = 'failed', finished_at = now(), error_message = $2
+        WHERE id = $1`,
+      [runId, message.slice(0, 2000)],
+    );
+    throw error;
+  }
+}
+
+main().catch((error) => {
+  console.error("Detail sync failed.", error);
+  process.exitCode = 1;
+});
