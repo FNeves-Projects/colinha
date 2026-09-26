@@ -21,7 +21,7 @@ export function DataFreshnessNote({ freshness, variant = "footer" }: DataFreshne
           <span>{updatedLabel} </span>
         </>
       ) : (
-        <span>Consulte o TSE para confirmar situação e dados oficiais das candidaturas. </span>
+        <span>Dados do TSE: consulte a situação e os dados oficiais das candidaturas. </span>
       )}
       <a href={TSE_DIVULGA_HOME_URL} target="_blank" rel="noopener noreferrer">
         Confirme no site do TSE

@@ -1476,7 +1476,6 @@ export function BallotBuilder() {
   const [notice, setNotice] = useState("");
   const [pickerOfficeId, setPickerOfficeId] = useState<string | null>(null);
   const [mobilePicker, setMobilePicker] = useState(false);
-  const ballotRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLDivElement>(null);
   const profileCacheRef = useRef(new Map<string, Candidate>());
   const profileRequestsRef = useRef(new Map<string, Promise<Candidate | null>>());
@@ -1821,8 +1820,6 @@ export function BallotBuilder() {
       pixelRatio: 2,
       width,
       height,
-      canvasWidth: width * 2,
-      canvasHeight: height * 2,
       backgroundColor: previewTheme === "dark" ? "#151820" : "#e7eaf0",
       includeQueryParams: true,
       fetchRequestInit: { mode: "cors", cache: "no-cache" },
@@ -2130,9 +2127,11 @@ export function BallotBuilder() {
                 <div><span className="step">02</span><h2>Sua colinha</h2></div>
                 <p>Atualiza conforme você escolhe.</p>
               </div>
-              <div className={`ballot-frame${previewTheme === "dark" ? " ballot-frame--dark" : ""}`}>
+              <div
+                ref={captureRef}
+                className={`ballot-frame${previewTheme === "dark" ? " ballot-frame--dark" : ""}`}
+              >
                 <div
-                  ref={ballotRef}
                   id="ballot-card"
                   className={`ballot-paper ballot-sheet${previewTheme === "dark" ? " ballot-preview-dark" : ""}`}
                 >
@@ -2273,22 +2272,6 @@ export function BallotBuilder() {
         />
       )}
 
-      <div className="ballot-export-capture" aria-hidden="true">
-        <div
-          ref={captureRef}
-          className={`ballot-frame ballot-export-frame${previewTheme === "dark" ? " ballot-frame--dark" : ""}`}
-        >
-          <div className={`ballot-paper ballot-sheet${previewTheme === "dark" ? " ballot-preview-dark" : ""}`}>
-            <BallotSheetContent
-              selections={selections}
-              showViceOnBallot={showViceOnBallot}
-              ticketSlates={ticketSlates}
-              duplicateSenator={duplicateSenator}
-              imagePriority
-            />
-          </div>
-        </div>
-      </div>
     </main>
   );
 }
