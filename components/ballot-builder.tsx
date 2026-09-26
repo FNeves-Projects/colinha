@@ -1794,7 +1794,14 @@ export function BallotBuilder() {
   }, [hydrated, selections, ticketSlates]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    // PNG rendering is CPU-heavy and blocks Safari's main thread. On touch
+    // devices, generate it only after an explicit export/share action so
+    // scrolling and the browser chrome animation stay responsive.
+    if (
+      !hydrated ||
+      isTouchDevice() ||
+      window.matchMedia("(max-width: 960px)").matches
+    ) return;
     const timer = window.setTimeout(() => {
       void ensureBallotCaptureFile().catch(() => {});
     }, 700);
@@ -2053,7 +2060,6 @@ export function BallotBuilder() {
           <div className="hero-meta" aria-label="Informações da eleição">
             <p className="eyebrow">Eleição 2026 · São Paulo</p>
             <div className="hero-trust">
-              <span><Check size={14} aria-hidden="true" /> Dados do TSE</span>
               <span><Check size={14} aria-hidden="true" /> Salvo no aparelho</span>
             </div>
           </div>
